@@ -1,0 +1,6 @@
+{
+  "name": "Ruta del Chocolate de Sucre",
+  "description": "Plataforma 3D interactiva de la ruta patrimonial del chocolate de Sucre, con islas flotantes de fábricas emblemáticas, recorridos inmersivos y desempaquetado de productos en 3D.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
