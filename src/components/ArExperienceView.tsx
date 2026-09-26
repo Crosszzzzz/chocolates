@@ -150,6 +150,13 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({
   const assemblyRef = useRef<THREE.Group | null>(null);
   /** Last normalized WORLD size (meters), for placement lift + the temp scale log. */
   const placedSizeRef = useRef(new THREE.Vector3());
+  /**
+   * Locked assembly scale taken right after normalize+clamp (load/swap only).
+   * Restored every frame after placement so no hit/anchor matrix can rescale
+   * the bar (position + yaw only — never scale/quaternion from XR poses).
+   */
+  const lockedScaleRef = useRef(new THREE.Vector3(1, 1, 1));
+  const lockedScaleReadyRef = useRef(false);
 
   // Gesture state (pointer-driven; XR select only handles first placement).
   const gestureRef = useRef({
@@ -199,6 +206,10 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({
       const assembly = coreGroup.parent;
       const world = applyRealWorldClamp(assembly, localSize);
       placedSizeRef.current.copy(world);
+      if (assembly) {
+        lockedScaleRef.current.copy(assembly.scale);
+        lockedScaleReadyRef.current = true;
+      }
       if (assembly) assembly.position.y = world.y / 2;
       slideDistanceRef.current = world.x * 0.75;
       coreGroup.position.x = 0;
@@ -323,6 +334,10 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({
       // so load and unwrap-swap converge to the same world size.
       const world = applyRealWorldClamp(assembly, localSize);
       placedSizeRef.current.copy(world);
+      if (assembly) {
+        lockedScaleRef.current.copy(assembly.scale);
+        lockedScaleReadyRef.current = true;
+      }
       // Sleeve is built in assembly-LOCAL units; the world size only drives
       // lift (y) and slide distance.
       const shellDims: ShellDims = { width: localSize.x, height: localSize.y, depth: localSize.z };
@@ -758,6 +773,9 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({
       const onSelect = () => {
         // First tap confirms the placement: the live hit-test wins,
         // otherwise the auto-placed preview in front of the camera is kept.
+        // Preview and placed are the SAME object — after isPlaced=true the
+        // position freezes (no more hit-follow; anchor-follow below ignores
+        // jumps >= 0.25m). Only position + yaw are ever copied.
         if (!isPlacedRef.current && !movingRef.current) {
           const model = modelRootRef.current;
           if (model && (hasHitRef.current || autoPlacedRef.current)) {
@@ -768,13 +786,43 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({
             }
             model.rotation.y = userYawRef.current;
             model.visible = true;
+            // Locked scale: never inherit scale from a hit/anchor matrix.
+            const assembly = assemblyRef.current;
+            if (assembly && lockedScaleReadyRef.current) {
+              assembly.scale.copy(lockedScaleRef.current);
+            }
+            // Min/max camera distance so a 15-20cm hit doesn't fill the
+            // screen (looks giant) and a far hit doesn't park the bar behind.
+            // Keeps the support y (no floating).
+            const cam = cameraRef.current;
+            let dist = -1;
+            if (cam) {
+              dist = cam.position.distanceTo(model.position);
+              const dir = new THREE.Vector3();
+              if (dist < 0.45) {
+                cam.getWorldDirection(dir);
+                dir.y = 0;
+                if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
+                dir.normalize();
+                const target = cam.position.clone().add(dir.multiplyScalar(0.55));
+                target.y = model.position.y;
+                model.position.copy(target);
+                dist = cam.position.distanceTo(model.position);
+              } else if (dist > 4) {
+                cam.getWorldDirection(dir);
+                const target = cam.position.clone().add(dir.multiplyScalar(1.2));
+                target.y = model.position.y;
+                model.position.copy(target);
+                dist = cam.position.distanceTo(model.position);
+              }
+            }
             isPlacedRef.current = true;
             setPlaced(true);
             const reticle = reticleRef.current;
             if (reticle) reticle.visible = false;
             void tryCreateAnchor();
             // TEMP-AR-SCALE-LOG: remote verification for the person-size bug.
-            console.log('[AR] placed size', placedSizeRef.current.toArray(), 'scale', assemblyRef.current?.scale.toArray());
+            console.log('[AR] placed size', placedSizeRef.current.toArray(), 'scale', assemblyRef.current?.scale.toArray(), 'dist', dist);
           }
         }
       };
@@ -868,8 +916,11 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({
             }
           }
 
-          // Anchor follow: once placed with an anchor, it owns the position.
-          if (model && anchorRef.current && isPlacedRef.current) {
+          // Anchor follow (frozen once placed): only accept small corrections
+          // (<0.25m/frame). Bigger jumps are drift/re-localization, not real
+          // movement — ignoring them keeps the preview == placed object.
+          // Never copies scale/quaternion: position only, yaw stays manual.
+          if (model && anchorRef.current && isPlacedRef.current && !movingRef.current) {
             try {
               const refSpace = renderer.xr.getReferenceSpace();
               const anchorSpace = (
@@ -880,14 +931,48 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({
                   ? frame.getPose(anchorSpace, refSpace)
                   : null;
               if (anchorPose) {
-                model.position.set(
-                  anchorPose.transform.position.x,
-                  anchorPose.transform.position.y,
-                  anchorPose.transform.position.z
+                const ap = anchorPose.transform.position;
+                const jump = Math.hypot(
+                  ap.x - model.position.x,
+                  ap.y - model.position.y,
+                  ap.z - model.position.z
                 );
+                if (jump < 0.25) {
+                  model.position.set(ap.x, ap.y, ap.z);
+                }
               }
             } catch {
               // Keep the last known position on anchor errors.
+            }
+          }
+
+          // Post-placement stabilization, every frame: locked scale wins and
+          // the bar is kept in a readable range (0.55m if too close, 1.2m
+          // if a far hit parked it behind). Keeps support y.
+          if (model && isPlacedRef.current && !movingRef.current) {
+            const assembly = assemblyRef.current;
+            if (assembly && lockedScaleReadyRef.current) {
+              assembly.scale.copy(lockedScaleRef.current);
+            }
+            const cam = cameraRef.current;
+            if (cam && model.visible) {
+              const dist = cam.position.distanceTo(model.position);
+              if (dist < 0.45) {
+                const fwd = new THREE.Vector3();
+                cam.getWorldDirection(fwd);
+                fwd.y = 0;
+                if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+                fwd.normalize();
+                const target = cam.position.clone().add(fwd.multiplyScalar(0.55));
+                target.y = model.position.y;
+                model.position.copy(target);
+              } else if (dist > 4) {
+                const fwd = new THREE.Vector3();
+                cam.getWorldDirection(fwd);
+                const target = cam.position.clone().add(fwd.multiplyScalar(1.2));
+                target.y = model.position.y;
+                model.position.copy(target);
+              }
             }
           }
         }
