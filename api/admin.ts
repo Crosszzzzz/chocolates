@@ -5,18 +5,31 @@
 // Contract: 200 { sku, priceBOB, stock } | 401/403/400/500 { error_es }.
 // Rollback: delete this file; shop + checkout keep working without admin.
 type Body = { adminEmail?: unknown; sku?: unknown; priceBOB?: unknown; stock?: unknown };
-type VercelReq = { method?: string; body?: Body };
+type VercelReq = { method?: string; headers?: { origin?: string | string[] }; body?: Body };
 type VercelRes = { setHeader: (n: string, v: string) => void; status: (c: number) => VercelRes; json: (b: unknown) => void; end: (b?: string) => void };
 function env(n: string): string { const v = process.env[n]; return typeof v === 'string' ? v.trim() : '' }
+const ALLOWED_ORIGINS = ['https://chocolates-zeta.vercel.app', 'http://localhost:3000'];
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  return /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.vercel\.app$/i.test(origin);
+}
+function applyCors(req: VercelReq, res: VercelRes): void {
+  const raw = req.headers?.origin;
+  const origin = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
+  if (origin !== '' && isAllowedOrigin(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 function allowList(): string[] { return env('ADMIN_EMAILS').split(',').map((s) => s.trim().toLowerCase()).filter((s) => s !== '') }
 function isAdmin(email: unknown): boolean {
   if (typeof email !== 'string') return false;
   return allowList().includes(email.trim().toLowerCase());
 }
 export default async function handler(req: VercelReq, res: VercelRes): Promise<void> {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  applyCors(req, res);
   if (req.method === 'OPTIONS') { res.status(200).end(''); return }
   if (req.method !== undefined && req.method !== 'POST') { res.status(405).json({ error_es: 'Método no permitido' }); return }
   const { adminEmail, sku, priceBOB, stock } = req.body ?? {};

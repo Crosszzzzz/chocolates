@@ -29,6 +29,7 @@ export const CheckoutModal: React.FC<Props> = ({ open, catalog, onClose }) => {
     } catch { setErrorEs('No se pudo procesar el pedido'); setPhase('form') }
   }
   const delivery = fulfillment === 'delivery-sucre';
+  const pickupAddress = ((import.meta.env.VITE_PICKUP_ADDRESS as string | undefined) ?? '').trim();
   return (
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Finalizar compra">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
@@ -53,6 +54,9 @@ export const CheckoutModal: React.FC<Props> = ({ open, catalog, onClose }) => {
                 </button>
               ))}
             </div>
+            {!delivery && (
+              <p className="text-xs text-[#bda393]">Retiro en tienda: {pickupAddress !== '' ? pickupAddress : 'Coordinamos el retiro por WhatsApp'}</p>
+            )}
             {delivery && (
               <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Dirección en Sucre" aria-label="Dirección en Sucre" autoComplete="street-address"
                 className="min-h-[44px] rounded-xl bg-[#25130b] border border-[#d4af37]/20 px-3 text-sm text-[#fcf8f2] placeholder:text-[#8a7265]" />

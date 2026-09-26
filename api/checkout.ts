@@ -3,13 +3,26 @@
 // Contract: 200 { orderId, totalBOB } | 400/409/500 { error_es }.
 // Rollback: delete this file; cart + catalog keep working without checkout.
 type Line = { sku: string; qty: number };
-type VercelReq = { method?: string; body?: { lines?: Line[]; fulfillment?: string; address?: string; clientTotalBOB?: number } };
+type VercelReq = { method?: string; headers?: { origin?: string | string[] }; body?: { lines?: Line[]; fulfillment?: string; address?: string; clientTotalBOB?: number } };
 type VercelRes = { setHeader: (n: string, v: string) => void; status: (c: number) => VercelRes; json: (b: unknown) => void; end: (b?: string) => void };
 function env(n: string): string { const v = process.env[n]; return typeof v === 'string' ? v.trim() : '' }
-export default async function handler(req: VercelReq, res: VercelRes): Promise<void> {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+const ALLOWED_ORIGINS = ['https://chocolates-zeta.vercel.app', 'http://localhost:3000'];
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  return /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.vercel\.app$/i.test(origin);
+}
+function applyCors(req: VercelReq, res: VercelRes): void {
+  const raw = req.headers?.origin;
+  const origin = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
+  if (origin !== '' && isAllowedOrigin(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+export default async function handler(req: VercelReq, res: VercelRes): Promise<void> {
+  applyCors(req, res);
   if (req.method === 'OPTIONS') { res.status(200).end(''); return }
   if (req.method !== undefined && req.method !== 'POST') { res.status(405).json({ error_es: 'Método no permitido' }); return }
   const { lines, fulfillment, address, clientTotalBOB } = req.body ?? {};
