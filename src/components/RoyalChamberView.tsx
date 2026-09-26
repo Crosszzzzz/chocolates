@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Crown, Sparkles, ArrowRight, Eye, ChevronLeft, Award } from 'lucide-react';
 import { ChocolateFactory, ProductSpec } from '../types/chocolate';
 import { playPedestalHum } from '../utils/audio';
+import { useCart } from '../contexts/CartContext';
+import { toCommerce } from '../data/factories';
 
 interface RoyalChamberViewProps {
   factory: ChocolateFactory;
@@ -21,6 +23,8 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredProduct, setHoveredProduct] = useState<ProductSpec | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductSpec | null>(null);
+  // PR3 cart overlay hook (overlay-only, never inside the scene effect).
+  const { add, warning } = useCart();
 
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -372,6 +376,9 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
     };
   }, [factory]);
 
+  const bannerProduct = hoveredProduct;
+  const bannerCommerce = bannerProduct ? toCommerce(bannerProduct) : null;
+
   return (
     <div className="relative w-full h-screen overflow-hidden bg-gradient-to-b from-[#1c0d07] via-[#241209] to-[#0e0503] select-none">
       
@@ -466,16 +473,29 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
                   <span>Haz clic sobre el producto para desenvolver su empaque</span>
                 </span>
 
-                <button
-                  onClick={() => onSelectProduct(hoveredProduct)}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f1c40f] to-[#b8860b] text-[#1a0f08] font-extrabold text-xs flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
-                >
-                  <Eye className="w-4 h-4" />
-                  <span>Desenvolver en 3D</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* PR3 overlay add-to-cart (no RAF/scene changes) */}
+                  {bannerCommerce && (
+                    <button
+                      onClick={() => add(bannerCommerce.sku, bannerCommerce.stock)}
+                      disabled={bannerCommerce.stock <= 0}
+                      title={bannerCommerce.stock <= 0 ? 'Sin stock' : `Añadir ${bannerProduct?.name} al carrito`}
+                      className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#2e1910] hover:bg-[#3d2215] text-[#f1c40f] font-extrabold text-xs flex items-center gap-2 border border-[#d4af37]/40 active:scale-95 transition-all shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span>{bannerCommerce.stock <= 0 ? 'Sin stock' : `Añadir · Bs ${bannerCommerce.priceBOB.toFixed(2)}`}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onSelectProduct(hoveredProduct)}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f1c40f] to-[#b8860b] text-[#1a0f08] font-extrabold text-xs flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span>Desenvolver en 3D</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-
+              {warning && <p role="alert" className="mt-2 text-[11px] text-[#f0a6a6]">{warning}</p>}
             </div>
           </motion.div>
         )}

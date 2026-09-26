@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { FACTORIES } from './data/factories';
+import React, { useState, useEffect, useMemo } from 'react';
+import { FACTORIES, fetchCatalog, type CatalogEntry } from './data/factories';
 import { ChocolateFactory, ProductSpec, RoutePhase } from './types/chocolate';
 import { Navbar } from './components/Navbar';
 import { AuthProvider } from './contexts/AuthContext';
+import { CartProvider } from './contexts/CartContext';
+import { CartDrawer, type CatalogMap } from './components/CartDrawer';
 import { FloatingIslandsView } from './components/FloatingIslandsView';
 import { HeritageCorridorView } from './components/HeritageCorridorView';
 import { RoyalChamberView } from './components/RoyalChamberView';
@@ -17,6 +19,14 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [navbarVisible, setNavbarVisible] = useState<boolean>(true);
+  // PR3 catalog + cart overlay state (visual-no-op 3D, overlay only).
+  const [cartOpen, setCartOpen] = useState(false);
+  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void fetchCatalog().then(({ entries }) => { if (alive) setCatalog(entries) }); return () => { alive = false };
+  }, []);
+  const catalogMap = useMemo<CatalogMap>(() => Object.fromEntries(catalog.map((e) => [e.sku, { nameEs: e.nameEs, priceBOB: e.priceBOB, stock: e.stock }])) as CatalogMap, [catalog]);
 
   // Initialize audio context on first user click
   useEffect(() => {
@@ -93,8 +103,8 @@ export default function App() {
 
   return (
     <AuthProvider>
+    <CartProvider>
     <div className="relative w-screen h-screen overflow-hidden bg-[#120a06] text-[#f7efe5] font-sans select-none">
-      
       {/* Dynamic Global Floating Navbar */}
       <Navbar
         currentFactory={currentFactory}
@@ -108,6 +118,7 @@ export default function App() {
         onGoToChamber={handleEnterChamber}
         onGoToCorridor={handleGoToCorridor}
         onOpenGuide={() => setIsGuideOpen(true)}
+        onOpenCart={() => setCartOpen(true)}
       />
 
       {/* Primary Experience Stages */}
@@ -152,7 +163,11 @@ export default function App() {
         onClose={() => setIsGuideOpen(false)}
       />
 
+      {/* PR3 cart overlay (bottom-sheet mobile, panel desktop) */}
+      <CartDrawer open={cartOpen} catalog={catalogMap} onClose={() => setCartOpen(false)} />
+
     </div>
+    </CartProvider>
     </AuthProvider>
   );
 }
