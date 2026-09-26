@@ -2,8 +2,8 @@ import React, { useMemo } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 export type CatalogMap = Record<string, { nameEs: string; priceBOB: number; stock: number }>;
-interface Props { open: boolean; catalog: CatalogMap; onClose: () => void }
-export const CartDrawer: React.FC<Props> = ({ open, catalog, onClose }) => {
+interface Props { open: boolean; catalog: CatalogMap; onClose: () => void; onCheckout: () => void }
+export const CartDrawer: React.FC<Props> = ({ open, catalog, onClose, onCheckout }) => {
   const { lines, setQty, remove } = useCart();
   const total = useMemo(() => lines.reduce((n, l) => n + (catalog[l.sku]?.priceBOB ?? 0) * l.qty, 0), [lines, catalog]);
   if (!open) return null;
@@ -40,6 +40,9 @@ export const CartDrawer: React.FC<Props> = ({ open, catalog, onClose }) => {
           <span className="text-xs text-[#bda393]">Total</span>
           <span className="text-sm font-extrabold text-[#f1c40f]">Bs {total.toFixed(2)}</span>
         </div>
+        {lines.length > 0 && (
+          <button onClick={onCheckout} className="mt-3 w-full min-h-[44px] rounded-xl bg-[#d4af37] text-[#1a0f08] text-sm font-bold cursor-pointer">Ir a pagar</button>
+        )}
       </div>
     </div>
   );

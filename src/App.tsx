@@ -5,6 +5,7 @@ import { Navbar } from './components/Navbar';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { CartDrawer, type CatalogMap } from './components/CartDrawer';
+import { CheckoutModal } from './components/CheckoutModal';
 import { FloatingIslandsView } from './components/FloatingIslandsView';
 import { HeritageCorridorView } from './components/HeritageCorridorView';
 import { RoyalChamberView } from './components/RoyalChamberView';
@@ -21,6 +22,7 @@ export default function App() {
   const [navbarVisible, setNavbarVisible] = useState<boolean>(true);
   // PR3 catalog + cart overlay state (visual-no-op 3D, overlay only).
   const [cartOpen, setCartOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   useEffect(() => {
     let alive = true;
@@ -164,7 +166,9 @@ export default function App() {
       />
 
       {/* PR3 cart overlay (bottom-sheet mobile, panel desktop) */}
-      <CartDrawer open={cartOpen} catalog={catalogMap} onClose={() => setCartOpen(false)} />
+      <CartDrawer open={cartOpen} catalog={catalogMap} onClose={() => setCartOpen(false)} onCheckout={() => { setCartOpen(false); setCheckoutOpen(true) }} />
+      {/* PR4 checkout overlay (mock pay + wa.me, visual-no-op 3D) */}
+      <CheckoutModal open={checkoutOpen} catalog={catalogMap} onClose={() => setCheckoutOpen(false)} />
 
     </div>
     </CartProvider>
