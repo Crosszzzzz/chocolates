@@ -21,6 +21,7 @@ type DbProductRow = {
 
 type VercelRequest = {
   method?: string;
+  headers?: { origin?: string | string[] };
 };
 
 type VercelResponse = {
@@ -29,6 +30,24 @@ type VercelResponse = {
   json: (body: unknown) => void;
   end: (body?: string) => void;
 };
+
+const ALLOWED_ORIGINS = ['https://chocolates-zeta.vercel.app', 'http://localhost:3000'];
+
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  return /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.vercel\.app$/i.test(origin);
+}
+
+function applyCors(req: VercelRequest, res: VercelResponse): void {
+  const raw = req.headers?.origin;
+  const origin = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
+  if (origin !== '' && isAllowedOrigin(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
 function getEnv(name: string): string {
   const value = process.env[name];
@@ -46,9 +65,7 @@ function toCatalogProduct(row: DbProductRow): CatalogProduct {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  applyCors(req, res);
 
   if (req.method === 'OPTIONS') {
     res.status(200).end('');
