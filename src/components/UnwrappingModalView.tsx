@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import {
@@ -14,37 +15,56 @@ import {
   Layers,
   Scale,
   Maximize2,
-  Info
+  Scan
 } from 'lucide-react';
 import { ProductSpec, ChocolateFactory } from '../types/chocolate';
 import { playFoilTearSound, playChocolateSnapSound } from '../utils/audio';
+import { getModelPaths, loadGltfCached, normalizeBarModel, disposeObject, applyPbrEnvFix } from '../utils/models';
+import {
+  WrapperPiece,
+  ShellDims,
+  buildWrapperShell,
+  createWrapperTexture,
+  launchPiece,
+  resetPieces,
+  smoothstep,
+  updatePiecePhysics,
+  TEAR_PATH_PX,
+  DENT_PATH_PX,
+  MAX_TEAR_PER_GESTURE,
+  TEAR_SOUND_THROTTLE
+} from '../utils/wrapper';
 
 interface UnwrappingModalViewProps {
   product: ProductSpec;
   factory: ChocolateFactory;
   onBackToChamber: () => void;
+  /** Optional: open WebXR AR for this product (toolbar button). */
+  onOpenAr?: (product: ProductSpec) => void;
+  /**
+   * Progress restored when returning from AR (0..1). Applied once on mount;
+   * the view owns progress from then on and reports it via onProgressChange.
+   */
+  initialProgress?: number;
+  onProgressChange?: (progress: number) => void;
 }
 
-interface WrapperPiece {
-  mesh: THREE.Mesh;
-  initialPos: THREE.Vector3;
-  initialRot: THREE.Euler;
-  torn: boolean;
-  velocity: THREE.Vector3;
-  rotVelocity: THREE.Vector3;
-  opacity: number;
-}
+/** Tear gesture tuning is shared with the AR view — see utils/wrapper.ts. */
 
 export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   product,
   factory,
-  onBackToChamber
+  onBackToChamber,
+  onOpenAr,
+  initialProgress = 0,
+  onProgressChange
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [unwrapProgress, setUnwrapProgress] = useState<number>(0);
-  const [isFullyUnwrapped, setIsFullyUnwrapped] = useState<boolean>(false);
-  const [isDraggingToTear, setIsDraggingToTear] = useState<boolean>(false);
-  const [isOrbiting, setIsOrbiting] = useState<boolean>(false);
+  const [unwrapProgress, setUnwrapProgress] = useState<number>(() =>
+    Math.min(Math.max(initialProgress, 0), 1)
+  );
+  const [isFullyUnwrapped, setIsFullyUnwrapped] = useState<boolean>(initialProgress >= 1);
+  const [isCoreLoading, setIsCoreLoading] = useState<boolean>(true);
 
   // Three.js instances
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -53,86 +73,100 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   const animationFrameId = useRef<number | null>(null);
 
   const chocolateBarGroupRef = useRef<THREE.Group | null>(null);
+  const coreGroupRef = useRef<THREE.Group | null>(null);
+  const shellGroupRef = useRef<THREE.Group | null>(null);
   const wrapperPiecesRef = useRef<WrapperPiece[]>([]);
   const isInteractingRef = useRef<boolean>(false);
-  const mousePreviousPos = useRef({ x: 0, y: 0 });
+  /** True once the wrapped core was swapped for the real unwrapped GLB. */
+  const coreSwappedRef = useRef<boolean>(false);
 
-  // Generate Branded Wrapper Texture for 3D sleeve
-  const createWrapperTexture = (prod: ProductSpec, fac: ChocolateFactory): THREE.CanvasTexture => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 1024;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return new THREE.CanvasTexture(canvas);
+  // Mirrors for the RAF/pointer loop — never read React state from the effect.
+  const fullyUnwrappedRef = useRef<boolean>(initialProgress >= 1);
+  const coreReadyRef = useRef<boolean>(false);
+  const progressRef = useRef<number>(Math.min(Math.max(initialProgress, 0), 1));
+  const slideDistanceRef = useRef<number>(2.2);
+  const userRotXRef = useRef(0);
+  const userRotYRef = useRef(0);
 
-    // Primary brand sleeve background
-    const bgGrad = ctx.createLinearGradient(0, 0, 1024, 1024);
-    bgGrad.addColorStop(0, prod.wrapperPrimaryColor);
-    bgGrad.addColorStop(1, '#150804');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, 1024, 1024);
+  // Callbacks may change identity across renders — keep stable refs for the effect.
+  const initialProgressRef = useRef(initialProgress);
+  const onProgressChangeRef = useRef(onProgressChange);
+  onProgressChangeRef.current = onProgressChange;
 
-    // Ornate Gold Frame
-    ctx.strokeStyle = '#d4af37';
-    ctx.lineWidth = 18;
-    ctx.strokeRect(36, 36, 952, 952);
+  // Report progress to App (so AR can resume from it).
+  useEffect(() => {
+    onProgressChangeRef.current?.(unwrapProgress);
+  }, [unwrapProgress]);
 
-    ctx.strokeStyle = '#f1c40f';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(58, 58, 908, 908);
+  /**
+   * Swap the wrapped core for the REAL unwrapped chocolate GLB and force-hide
+   * the sleeve (even if a staggered tear-all left dented pieces visible).
+   * The clone shares geometry/materials with the GLB cache, so the old core
+   * is only detached — never disposed — unless it is the procedural fallback.
+   */
+  const swapCoreToUnwrapped = async () => {
+    if (coreSwappedRef.current) return;
+    coreSwappedRef.current = true;
+    const coreGroup = coreGroupRef.current;
+    const shellGroup = shellGroupRef.current;
+    if (shellGroup) {
+      for (const p of wrapperPiecesRef.current) {
+        p.opacity = 0;
+        if (p.mesh) p.mesh.visible = false;
+      }
+      shellGroup.visible = false;
+    }
+    if (!coreGroup) return;
+    try {
+      const gltf = await loadGltfCached(getModelPaths(product).glbUnwrapped);
+      while (coreGroup.children.length > 0) {
+        const child = coreGroup.children[0];
+        coreGroup.remove(child);
+        if (!coreGroup.userData.fromCache) disposeObject(child);
+      }
+      coreGroup.userData.fromCache = true;
+      const clone = gltf.scene.clone(true);
+      applyPbrEnvFix(clone);
+      coreGroup.add(clone);
+      normalizeBarModel(clone, 3.2, 'flat');
+      coreGroup.position.x = 0;
+    } catch (err) {
+      console.debug('Unwrapped GLB swap failed, keeping wrapped core:', err);
+      coreSwappedRef.current = false;
+    }
+  };
 
-    // Factory Header
-    ctx.fillStyle = '#f1c40f';
-    ctx.font = 'bold 44px "Cinzel", Georgia, serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(fac.name.toUpperCase(), 512, 160);
-
-    ctx.fillStyle = '#e6d5c3';
-    ctx.font = '24px sans-serif';
-    ctx.fillText('SUCRE - BOLIVIA • DESDE ' + fac.foundationYear, 512, 210);
-
-    // Golden Cocoa Pod Emblem
-    ctx.beginPath();
-    ctx.arc(512, 330, 80, 0, Math.PI * 2);
-    ctx.fillStyle = '#d4af37';
-    ctx.fill();
-    ctx.fillStyle = '#1c100a';
-    ctx.font = 'bold 36px "Cinzel", serif';
-    ctx.fillText('CACAO', 512, 342);
-
-    // Product Title
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 52px "Playfair Display", serif';
-    ctx.fillText(prod.cacaoPercentage + '% CACAO', 512, 490);
-
-    ctx.fillStyle = '#f1c40f';
-    ctx.font = '36px "Playfair Display", serif';
-    ctx.fillText(prod.name.length > 28 ? prod.name.slice(0, 28) + '...' : prod.name, 512, 560);
-
-    // Origin
-    ctx.fillStyle = '#e5c158';
-    ctx.font = 'italic 28px sans-serif';
-    ctx.fillText(prod.origin, 512, 630);
-
-    // Weight and Specs
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 32px sans-serif';
-    ctx.fillText(`PESO NETO ${prod.weight}`, 512, 720);
-
-    // Gold decorative seal at bottom
-    ctx.fillStyle = '#d4af37';
-    ctx.fillRect(262, 780, 500, 4);
-    ctx.font = '22px "Cinzel", serif';
-    ctx.fillText('CALIDAD DE EXPORTACIÓN • PATRIMONIO DE SUCRE', 512, 830);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    return texture;
+  /** Reverse of the unwrap swap: wrapped GLB back in, sleeve visible again. */
+  const restoreWrappedCore = async () => {
+    const coreGroup = coreGroupRef.current;
+    const shellGroup = shellGroupRef.current;
+    coreSwappedRef.current = false;
+    if (shellGroup) shellGroup.visible = true;
+    if (!coreGroup) return;
+    try {
+      const gltf = await loadGltfCached(getModelPaths(product).glb);
+      while (coreGroup.children.length > 0) {
+        const child = coreGroup.children[0];
+        coreGroup.remove(child);
+        if (!coreGroup.userData.fromCache) disposeObject(child);
+      }
+      coreGroup.userData.fromCache = true;
+      const clone = gltf.scene.clone(true);
+      applyPbrEnvFix(clone);
+      coreGroup.add(clone);
+      normalizeBarModel(clone, 3.2, 'flat');
+      coreGroup.position.x = 0;
+    } catch (err) {
+      console.debug('Wrapped GLB restore failed:', err);
+    }
   };
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    let disposed = false;
+    let coreLoadToken = 0;
 
     // 1. Scene Setup
     const scene = new THREE.Scene();
@@ -141,7 +175,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
     // 2. Camera Setup
     const camera = new THREE.PerspectiveCamera(
       45,
-      container.clientWidth / container.clientHeight,
+      container.clientWidth / Math.max(container.clientHeight, 1),
       0.1,
       50
     );
@@ -153,12 +187,24 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
     // 4. Lighting for ultra-glossy realistic chocolate bar
     const ambient = new THREE.AmbientLight(0xffeedd, 0.9);
     scene.add(ambient);
+
+    const hemi = new THREE.HemisphereLight(0xfff5e6, 0x2a140a, 0.6);
+    scene.add(hemi);
+
+    // IBL so metalness-heavy GLB foil never renders black.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
 
     const keyLight = new THREE.DirectionalLight(0xfffaed, 2.4);
     keyLight.position.set(3, 5, 4);
@@ -173,279 +219,334 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
     rimLight.position.set(0, 4, -4);
     scene.add(rimLight);
 
-    // 5. Build Chocolate Bar Group
+    // 5. Bar group: core (GLB chocolate) + shell (tearable wrapper pieces)
     const barGroup = new THREE.Group();
     chocolateBarGroupRef.current = barGroup;
     scene.add(barGroup);
 
-    // --- Core Molded Chocolate Bar ---
-    const barWidth = 1.9;
-    const barHeight = 3.2;
-    const barDepth = 0.24;
+    const coreGroup = new THREE.Group();
+    coreGroupRef.current = coreGroup;
+    barGroup.add(coreGroup);
 
-    // Rich physical chocolate material with clearcoat gloss
-    const chocolateMat = new THREE.MeshPhysicalMaterial({
-      color: new THREE.Color(product.colorHex),
-      roughness: 0.28,
-      metalness: 0.04,
-      clearcoat: 0.65,
-      clearcoatRoughness: 0.15,
-      reflectivity: 0.8
-    });
+    const shellGroup = new THREE.Group();
+    shellGroupRef.current = shellGroup;
+    barGroup.add(shellGroup);
 
-    // Base slab
-    const baseSlab = new THREE.Mesh(
-      new THREE.BoxGeometry(barWidth, barHeight, barDepth * 0.7),
-      chocolateMat
-    );
-    baseSlab.castShadow = true;
-    baseSlab.receiveShadow = true;
-    barGroup.add(baseSlab);
-
-    // Scored chocolate tablet blocks (3 columns x 5 rows = 15 squares)
-    const cols = 3;
-    const rows = 5;
-    const blockW = (barWidth - 0.18) / cols;
-    const blockH = (barHeight - 0.24) / rows;
-    const blockD = barDepth * 0.45;
-
-    for (let c = 0; c < cols; c++) {
-      for (let r = 0; r < rows; r++) {
-        const x = (c - (cols - 1) / 2) * blockW;
-        const y = (r - (rows - 1) / 2) * blockH;
-
-        // Beveled pyramid/pillow block
-        const blockGeo = new THREE.BoxGeometry(blockW * 0.9, blockH * 0.9, blockD);
-        const blockMesh = new THREE.Mesh(blockGeo, chocolateMat);
-        blockMesh.position.set(x, y, barDepth * 0.45);
-        blockMesh.castShadow = true;
-        barGroup.add(blockMesh);
-
-        // Center cocoa bean stamp on middle block
-        if (c === 1 && r === 2) {
-          const emblemGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.05, 16);
-          emblemGeo.rotateX(Math.PI / 2);
-          const emblemMat = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(product.colorHex),
-            roughness: 0.2,
-            metalness: 0.1
-          });
-          const emblem = new THREE.Mesh(emblemGeo, emblemMat);
-          emblem.position.set(x, y, barDepth * 0.68);
-          barGroup.add(emblem);
-        }
-      }
-    }
-
-    // --- Segmented Wrapper Pieces (Foil & Paper Sleeve) ---
-    const pieces: WrapperPiece[] = [];
     const wrapperTex = createWrapperTexture(product, factory);
 
-    const wrapperRows = 4;
-    const wrapperCols = 3;
-    const pieceW = (barWidth + 0.1) / wrapperCols;
-    const pieceH = (barHeight + 0.1) / wrapperRows;
+    /** Shared completion path (GLB tears + tear-all button). */
+    const completeUnwrap = () => {
+      if (fullyUnwrappedRef.current) return;
+      fullyUnwrappedRef.current = true;
+      setIsFullyUnwrapped(true);
+      playChocolateSnapSound();
+      // Show the REAL unwrapped chocolate bar, not the wrapped core.
+      void swapCoreToUnwrapped();
+      confetti({
+        particleCount: 60,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#d4af37', '#f1c40f', '#5c3317', '#ffffff']
+      });
+    };
 
-    for (let r = 0; r < wrapperRows; r++) {
-      for (let c = 0; c < wrapperCols; c++) {
-        const x = (c - (wrapperCols - 1) / 2) * pieceW;
-        const y = (r - (wrapperRows - 1) / 2) * pieceH;
-        const z = barDepth * 0.58;
+    const applyProgressState = (tornCount: number, total: number) => {
+      const p = total > 0 ? tornCount / total : 0;
+      progressRef.current = p;
+      setUnwrapProgress(p);
+      if (p >= 1) completeUnwrap();
+    };
 
-        // Dual-sided wrapper piece (outside printed wrapper, inside gold foil)
-        const pieceGeo = new THREE.PlaneGeometry(pieceW * 0.96, pieceH * 0.96);
+    /** Build sleeve around a known core size, then apply restored progress. */
+    const setupShell = (dims: ShellDims) => {
+      if (disposed) return;
+      const pieces = buildWrapperShell(shellGroup, dims, wrapperTex);
+      wrapperPiecesRef.current = pieces;
+      slideDistanceRef.current = dims.width * 0.75;
+      coreReadyRef.current = true;
+      setIsCoreLoading(false);
 
-        // UV mapping so pieces form the complete texture
-        const uvAttr = pieceGeo.attributes.uv;
-        const uMin = c / wrapperCols;
-        const uMax = (c + 1) / wrapperCols;
-        const vMin = r / wrapperRows;
-        const vMax = (r + 1) / wrapperRows;
-
-        uvAttr.setXY(0, uMin, vMax);
-        uvAttr.setXY(1, uMax, vMax);
-        uvAttr.setXY(2, uMin, vMin);
-        uvAttr.setXY(3, uMax, vMin);
-        uvAttr.needsUpdate = true;
-
-        const pieceMat = new THREE.MeshStandardMaterial({
-          map: wrapperTex,
-          roughness: 0.35,
-          metalness: 0.4,
-          side: THREE.DoubleSide,
-          transparent: true,
-          opacity: 1
-        });
-
-        const pieceMesh = new THREE.Mesh(pieceGeo, pieceMat);
-        pieceMesh.position.set(x, y, z);
-        pieceMesh.userData = { pieceIndex: pieces.length, isWrapper: true };
-        barGroup.add(pieceMesh);
-
-        pieces.push({
-          mesh: pieceMesh,
-          initialPos: pieceMesh.position.clone(),
-          initialRot: pieceMesh.rotation.clone(),
-          torn: false,
-          velocity: new THREE.Vector3(),
-          rotVelocity: new THREE.Vector3(),
-          opacity: 1
-        });
+      // Restore progress passed from a previous AR visit (hide pre-torn pieces).
+      const initP = Math.min(Math.max(initialProgressRef.current, 0), 1);
+      if (initP > 0 && pieces.length > 0) {
+        const n = Math.floor(initP * pieces.length);
+        const capped = initP >= 1 ? pieces.length : n;
+        for (let i = 0; i < capped; i++) {
+          launchPiece(pieces[i]);
+          pieces[i].opacity = 0;
+          pieces[i].mesh.visible = false;
+        }
+        applyProgressState(capped, pieces.length);
+        if (capped < pieces.length) {
+          fullyUnwrappedRef.current = false;
+          setIsFullyUnwrapped(false);
+        }
       }
-    }
+    };
 
-    wrapperPiecesRef.current = pieces;
+    /** Procedural fallback bar (landscape) if the GLB fails to load. */
+    const buildFallbackCore = () => {
+      const barWidth = 3.2;
+      const barHeight = 1.9;
+      const barDepth = 0.24;
 
-    // 6. Raycasting & Interaction Handlers
+      const chocolateMat = new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(product.colorHex),
+        roughness: 0.28,
+        metalness: 0.04,
+        clearcoat: 0.65,
+        clearcoatRoughness: 0.15,
+        reflectivity: 0.8
+      });
+
+      const baseSlab = new THREE.Mesh(
+        new THREE.BoxGeometry(barWidth, barHeight, barDepth * 0.7),
+        chocolateMat
+      );
+      baseSlab.castShadow = true;
+      baseSlab.receiveShadow = true;
+      coreGroup.add(baseSlab);
+
+      const cols = 5;
+      const rows = 3;
+      const blockW = (barWidth - 0.2) / cols;
+      const blockH = (barHeight - 0.18) / rows;
+      const blockD = barDepth * 0.45;
+
+      for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+          const x = (c - (cols - 1) / 2) * blockW;
+          const y = (r - (rows - 1) / 2) * blockH;
+          const blockMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(blockW * 0.9, blockH * 0.9, blockD),
+            chocolateMat
+          );
+          blockMesh.position.set(x, y, barDepth * 0.45);
+          blockMesh.castShadow = true;
+          coreGroup.add(blockMesh);
+        }
+      }
+
+      setupShell({ width: barWidth, height: barHeight, depth: barDepth });
+    };
+
+    // 6. Load the WRAPPED GLB core (foil modeled) under the tearable sleeve.
+    // The real unwrapped bar (glbUnwrapped) swaps in on completeUnwrap().
+    const token = ++coreLoadToken;
+    const paths = getModelPaths(product);
+    loadGltfCached(paths.glb)
+      .then((gltf) => {
+        if (disposed || token !== coreLoadToken) return;
+        const clone = gltf.scene.clone(true);
+        applyPbrEnvFix(clone);
+        coreGroup.userData.fromCache = true;
+        coreGroup.add(clone);
+        // Flat, long axis -> X; longest side ~3.2 world units (matches framing).
+        const size = normalizeBarModel(clone, 3.2, 'flat');
+        setupShell({ width: size.x, height: size.y, depth: size.z });
+      })
+      .catch((err) => {
+        if (disposed) return;
+        console.debug('Wrapped GLB failed, using procedural fallback:', err);
+        buildFallbackCore();
+      });
+
+    // 7. Raycasting & Interaction Handlers
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
+    // Gesture-local rate limiting (reset on every pointerdown).
+    let gestureTornCount = 0;
+    let lastSoundAt = 0;
+    const lastPointer = { x: 0, y: 0 };
+
+    const toNdc = (clientX: number, clientY: number) => {
+      const rect = container.getBoundingClientRect();
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      return mouse;
+    };
+
     const tearPiece = (piece: WrapperPiece) => {
       if (piece.torn) return;
-      piece.torn = true;
-      playFoilTearSound();
+      launchPiece(piece);
 
-      // Launch torn piece outward and downward with spin
-      piece.velocity.set(
-        (Math.random() - 0.5) * 0.08,
-        -0.06 - Math.random() * 0.06,
-        0.08 + Math.random() * 0.08
-      );
-      piece.rotVelocity.set(
-        (Math.random() - 0.5) * 0.2,
-        (Math.random() - 0.5) * 0.2,
-        (Math.random() - 0.5) * 0.2
-      );
-
-      // Check overall progress
-      const tornCount = pieces.filter((p) => p.torn).length;
-      const progress = tornCount / pieces.length;
-      setUnwrapProgress(progress);
-
-      if (progress >= 1) {
-        setIsFullyUnwrapped(true);
-        playChocolateSnapSound();
-        confetti({
-          particleCount: 60,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: ['#d4af37', '#f1c40f', '#5c3317', '#ffffff']
-        });
+      const now = performance.now();
+      if (now - lastSoundAt > TEAR_SOUND_THROTTLE) {
+        lastSoundAt = now;
+        playFoilTearSound();
       }
+
+      const pieces = wrapperPiecesRef.current;
+      applyProgressState(pieces.filter((p) => p.torn).length, pieces.length);
     };
 
-    const handlePointerMove = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      const currentX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      const currentY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    /** Raycast the intact shell and advance per-piece path accumulation. */
+    const processTearAt = (clientX: number, clientY: number, segLen: number) => {
+      if (!coreReadyRef.current || fullyUnwrappedRef.current) return;
+      if (gestureTornCount >= MAX_TEAR_PER_GESTURE) return;
 
-      // If user is dragging across wrapper: tear pieces that intersect
-      if (isInteractingRef.current && !isFullyUnwrapped) {
-        mouse.x = currentX;
-        mouse.y = currentY;
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(barGroup.children);
+      const pieces = wrapperPiecesRef.current;
+      if (pieces.length === 0) return;
 
-        for (const hit of intersects) {
-          const piece = pieces.find((p) => p.mesh === hit.object);
-          if (piece && !piece.torn) {
-            tearPiece(piece);
-          }
+      toNdc(clientX, clientY);
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(shellGroup.children, false);
+
+      for (const hit of intersects) {
+        const piece = pieces.find((p) => p.mesh === hit.object);
+        if (!piece || piece.torn) continue;
+
+        piece.pathAccum += segLen;
+
+        // First contact: dent before tearing (resistance feel).
+        if (!piece.dented && piece.pathAccum >= DENT_PATH_PX) {
+          piece.dented = true;
+          piece.mesh.position.z += 0.03;
+          piece.mesh.rotation.z += (Math.random() - 0.5) * 0.06;
         }
-      }
 
-      // If fully unwrapped: free 360 orbital rotation of chocolate bar
-      if (isInteractingRef.current && isFullyUnwrapped && barGroup) {
-        const deltaX = e.clientX - mousePreviousPos.current.x;
-        const deltaY = e.clientY - mousePreviousPos.current.y;
-        barGroup.rotation.y += deltaX * 0.012;
-        barGroup.rotation.x += deltaY * 0.012;
+        if (piece.pathAccum >= TEAR_PATH_PX && gestureTornCount < MAX_TEAR_PER_GESTURE) {
+          gestureTornCount++;
+          tearPiece(piece);
+        }
+        break; // one piece per sample keeps flicks modest
       }
-
-      mousePreviousPos.current = { x: e.clientX, y: e.clientY };
     };
 
-    const handlePointerDown = (e: MouseEvent) => {
+    const handlePointerDown = (e: PointerEvent) => {
+      try {
+        container.setPointerCapture(e.pointerId);
+      } catch {
+        // Best-effort pointer capture for touch drags.
+      }
+
       isInteractingRef.current = true;
-      mousePreviousPos.current = { x: e.clientX, y: e.clientY };
+      lastPointer.x = e.clientX;
+      lastPointer.y = e.clientY;
+      gestureTornCount = 0;
 
-      const rect = container.getBoundingClientRect();
-      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      const pieces = wrapperPiecesRef.current;
+      pieces.forEach((p) => {
+        if (!p.torn) p.pathAccum = 0;
+      });
+      // NOTE: do NOT capture barGroup.rotation into userRot here — while
+      // wrapped, rotation includes idle wobble which would accumulate
+      // as permanent drift across multiple tear gestures.
+    };
 
-      if (!isFullyUnwrapped) {
-        setIsDraggingToTear(true);
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(barGroup.children);
-        for (const hit of intersects) {
-          const piece = pieces.find((p) => p.mesh === hit.object);
-          if (piece && !piece.torn) {
-            tearPiece(piece);
-          }
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!isInteractingRef.current) {
+        lastPointer.x = e.clientX;
+        lastPointer.y = e.clientY;
+        return;
+      }
+
+      const dx = e.clientX - lastPointer.x;
+      const dy = e.clientY - lastPointer.y;
+      const segLen = Math.hypot(dx, dy);
+
+      if (fullyUnwrappedRef.current) {
+        // Free 360° orbit — driven by the ref, not stale React state.
+        userRotYRef.current += dx * 0.012;
+        userRotXRef.current += dy * 0.012;
+      } else if (segLen > 0.5) {
+        // Tear mode: sample current + path midpoint so fast flicks still hit.
+        const midX = lastPointer.x + dx * 0.5;
+        const midY = lastPointer.y + dy * 0.5;
+        processTearAt(midX, midY, segLen * 0.5);
+        processTearAt(e.clientX, e.clientY, segLen * 0.5);
+      }
+
+      lastPointer.x = e.clientX;
+      lastPointer.y = e.clientY;
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      isInteractingRef.current = false;
+      gestureTornCount = 0;
+      try {
+        if (container.hasPointerCapture(e.pointerId)) {
+          container.releasePointerCapture(e.pointerId);
         }
-      } else {
-        setIsOrbiting(true);
+      } catch {
+        // Ignore release errors.
       }
     };
 
-    const handlePointerUp = () => {
-      isInteractingRef.current = false;
-      setIsDraggingToTear(false);
-      setIsOrbiting(false);
-    };
-
-    // Reverse Scroll to Rewrap or Return
+    // Reverse scroll re-wraps the bar.
     const handleWheel = (e: WheelEvent) => {
       if (e.deltaY < -25) {
-        // Scrolling up in reverse: rewrap pieces or exit
         rewrapPieces();
       }
     };
 
     const handleResize = () => {
-      if (!container || !renderer || !camera) return;
-      camera.aspect = container.clientWidth / container.clientHeight;
+      if (!renderer || !camera) return;
+      const w = Math.max(container.clientWidth, 1);
+      const h = Math.max(container.clientHeight, 1);
+      const aspect = w / h;
+      camera.aspect = aspect;
       camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
+
+      // Keep the horizontal bar (3.2 wide, mid-slide up to ~+1.2) framed
+      // even on narrow portrait viewports.
+      const neededHalfW = 2.7;
+      const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
+      const hHalf = Math.atan(Math.tan(vHalf) * aspect);
+      camera.position.z = THREE.MathUtils.clamp(
+        neededHalfW / Math.max(Math.tan(hHalf), 0.0001),
+        4.5,
+        14
+      );
+
+      renderer.setSize(w, h);
     };
 
     window.addEventListener('resize', handleResize);
-    window.addEventListener('pointerup', handlePointerUp);
     container.addEventListener('pointerdown', handlePointerDown);
     container.addEventListener('pointermove', handlePointerMove);
-    container.addEventListener('wheel', handleWheel);
+    container.addEventListener('pointerup', handlePointerUp);
+    container.addEventListener('pointercancel', handlePointerUp);
+    container.addEventListener('wheel', handleWheel, { passive: true });
+    handleResize();
 
-    // 7. Animation Loop
-    let clock = new THREE.Clock();
+    // 8. Animation Loop
+    const clock = new THREE.Clock();
 
     const animate = () => {
       animationFrameId.current = requestAnimationFrame(animate);
       const elapsed = clock.getElapsedTime();
+      const interacting = isInteractingRef.current;
+      const unwrapped = fullyUnwrappedRef.current;
 
-      // Idle gentle float when not dragging
-      if (!isInteractingRef.current && barGroup) {
-        barGroup.position.y = Math.sin(elapsed * 1.4) * 0.06;
-        if (!isFullyUnwrapped) {
-          barGroup.rotation.y = Math.sin(elapsed * 0.6) * 0.08;
-        }
+      // Smooth core slide along the long axis ("a medio sacar").
+      const core = coreGroupRef.current;
+      if (core && coreReadyRef.current) {
+        const targetSlide = unwrapped
+          ? 0 // recenter when bare
+          : smoothstep(0.3, 0.9, progressRef.current) * slideDistanceRef.current;
+        core.position.x += (targetSlide - core.position.x) * 0.08;
       }
 
-      // Animate torn pieces falling and fading
-      pieces.forEach((piece) => {
-        if (piece.torn && piece.opacity > 0) {
-          piece.mesh.position.add(piece.velocity);
-          piece.mesh.rotation.x += piece.rotVelocity.x;
-          piece.mesh.rotation.y += piece.rotVelocity.y;
-          piece.mesh.rotation.z += piece.rotVelocity.z;
-
-          piece.opacity = Math.max(0, piece.opacity - 0.025);
-          (piece.mesh.material as THREE.MeshStandardMaterial).opacity = piece.opacity;
-
-          if (piece.opacity <= 0) {
-            piece.mesh.visible = false;
+      if (barGroup) {
+        if (!interacting) {
+          if (unwrapped) {
+            // Gentle idle spin after unwrap (user drag adds to userRotYRef).
+            userRotYRef.current += 0.0035;
           }
+          barGroup.position.y = Math.sin(elapsed * 1.4) * 0.06;
         }
-      });
+
+        // User orbit is the base; idle wobble only when wrapped & idle —
+        // so idle motion never fights an active drag.
+        const idleWobbleY = !interacting && !unwrapped ? Math.sin(elapsed * 0.6) * 0.08 : 0;
+        const idleWobbleX = !interacting && !unwrapped ? Math.sin(elapsed * 0.85) * 0.03 : 0;
+        barGroup.rotation.y = userRotYRef.current + idleWobbleY;
+        barGroup.rotation.x = userRotXRef.current + idleWobbleX;
+      }
+
+      updatePiecePhysics(wrapperPiecesRef.current);
 
       renderer.render(scene, camera);
     };
@@ -453,10 +554,12 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
     animate();
 
     return () => {
+      disposed = true;
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('pointerup', handlePointerUp);
       container.removeEventListener('pointerdown', handlePointerDown);
       container.removeEventListener('pointermove', handlePointerMove);
+      container.removeEventListener('pointerup', handlePointerUp);
+      container.removeEventListener('pointercancel', handlePointerUp);
       container.removeEventListener('wheel', handleWheel);
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
@@ -464,59 +567,93 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
       if (renderer.domElement && container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
+      wrapperTex.dispose();
+      wrapperPiecesRef.current = [];
+      chocolateBarGroupRef.current = null;
+      coreGroupRef.current = null;
+      shellGroupRef.current = null;
+      coreSwappedRef.current = false;
+      // Best-effort cleanup of non-shared fallback meshes.
+      if (coreGroup.children.length > 0 && !coreGroup.userData.fromCache) {
+        disposeObject(coreGroup);
+      }
+      if (scene.environment) {
+        (scene.environment as THREE.Texture).dispose();
+        scene.environment = null;
+      }
       renderer.dispose();
     };
+    // onSelectProduct-style callbacks are intentionally not deps: this effect
+    // only depends on the product/factory identity (matches codebase pattern).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product, factory]);
 
-  // Tear all wrapper pieces automatically
+  // --- Derived UI state ---
+  const progressPct = Math.round(unwrapProgress * 100);
+  const statusText = isFullyUnwrapped
+    ? '¡Tableta desnuda! Arrastra para rotar 360°'
+    : unwrapProgress === 0
+      ? 'Envoltorio completo'
+      : unwrapProgress < 0.45
+        ? `Desenvolviendo: ${progressPct}%`
+        : 'A medio sacar...';
+
+  // Tear all wrapper pieces automatically (staggered).
   const tearAll = () => {
     const pieces = wrapperPiecesRef.current;
     pieces.forEach((piece, idx) => {
       setTimeout(() => {
         if (!piece.torn) {
-          piece.torn = true;
-          playFoilTearSound();
-          piece.velocity.set(
-            (Math.random() - 0.5) * 0.09,
-            -0.08 - Math.random() * 0.06,
-            0.08 + Math.random() * 0.08
-          );
-          piece.rotVelocity.set(
-            (Math.random() - 0.5) * 0.2,
-            (Math.random() - 0.5) * 0.2,
-            (Math.random() - 0.5) * 0.2
-          );
-          setUnwrapProgress((idx + 1) / pieces.length);
+          launchPiece(piece);
+          if (idx % 3 === 0) playFoilTearSound();
+          const torn = pieces.filter((p) => p.torn).length;
+          const p = torn / pieces.length;
+          progressRef.current = p;
+          setUnwrapProgress(p);
         }
-      }, idx * 60);
+      }, idx * 55);
     });
 
     setTimeout(() => {
+      progressRef.current = 1;
+      setUnwrapProgress(1);
+      fullyUnwrappedRef.current = true;
       setIsFullyUnwrapped(true);
       playChocolateSnapSound();
+      // Force-hide every sleeve piece (stagger leftovers included), then
+      // swap in the REAL unwrapped chocolate bar.
+      for (const piece of pieces) {
+        piece.opacity = 0;
+        if (piece.mesh) piece.mesh.visible = false;
+      }
+      if (shellGroupRef.current) shellGroupRef.current.visible = false;
+      void swapCoreToUnwrapped();
       confetti({
         particleCount: 50,
         spread: 60,
-        origin: { y: 0.6 }
+        origin: { y: 0.6 },
+        colors: ['#d4af37', '#f1c40f', '#5c3317', '#ffffff']
       });
-    }, pieces.length * 60 + 100);
+    }, pieces.length * 55 + 100);
   };
 
-  // Re-wrap pieces back in reverse
+  // Re-wrap pieces back in reverse.
   const rewrapPieces = () => {
     const pieces = wrapperPiecesRef.current;
-    pieces.forEach((piece) => {
-      piece.torn = false;
-      piece.opacity = 1;
-      piece.mesh.visible = true;
-      piece.mesh.position.copy(piece.initialPos);
-      piece.mesh.rotation.copy(piece.initialRot);
-      (piece.mesh.material as THREE.MeshStandardMaterial).opacity = 1;
-    });
+    resetPieces(pieces);
+    // Wrapped chocolate back in, sleeve visible again.
+    void restoreWrappedCore();
 
     if (chocolateBarGroupRef.current) {
       chocolateBarGroupRef.current.rotation.set(0, 0, 0);
     }
+    if (coreGroupRef.current) {
+      coreGroupRef.current.position.x = 0;
+    }
+    userRotXRef.current = 0;
+    userRotYRef.current = 0;
+    fullyUnwrappedRef.current = false;
+    progressRef.current = 0;
 
     setUnwrapProgress(0);
     setIsFullyUnwrapped(false);
@@ -524,53 +661,67 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-gradient-to-b from-[#180b06] via-[#1f0e08] to-[#0d0503] select-none flex flex-col md:flex-row">
-      
-      {/* 3D Canvas Area */}
-      <div className="relative flex-1 h-full w-full">
+    <div className="relative w-full h-app overflow-hidden bg-gradient-to-b from-[#180b06] via-[#1f0e08] to-[#0d0503] select-none flex flex-col md:flex-row">
+      {/* 3D Canvas Area — flex child that can actually shrink on mobile */}
+      <div className="relative flex-[1.15] md:flex-1 min-h-0 w-full">
         <div
           ref={containerRef}
-          className={`w-full h-full ${
+          className={`w-full h-full touch-none ${
             isFullyUnwrapped ? 'cursor-grab active:cursor-grabbing' : 'cursor-crosshair'
           }`}
         />
 
+        {/* Loading overlay — never blocks the rest of the UI */}
+        <AnimatePresence>
+          {isCoreLoading && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-[#120a06]/60 backdrop-blur-sm pointer-events-none"
+            >
+              <div className="w-10 h-10 rounded-full border-2 border-[#d4af37]/30 border-t-[#f1c40f] animate-spin" />
+              <span className="text-xs font-semibold text-[#e5c158] tracking-wider uppercase">
+                Cargando tableta...
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Floating Controls & Interactive Instruction on top of canvas */}
-        <div className="absolute top-20 left-6 right-6 z-20 flex items-center justify-between pointer-events-none">
+        <div className="absolute top-20 left-4 right-4 sm:left-6 sm:right-6 z-20 flex items-start justify-between gap-2 pointer-events-none">
           <button
             onClick={onBackToChamber}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#1c100a]/90 backdrop-blur-md text-xs text-[#e5c158] hover:text-[#fff] hover:bg-[#2b170e] border border-[#d4af37]/30 transition-all pointer-events-auto cursor-pointer shadow-lg"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#1c100a]/90 backdrop-blur-md text-xs text-[#e5c158] hover:text-[#fff] hover:bg-[#2b170e] border border-[#d4af37]/30 transition-all pointer-events-auto cursor-pointer shadow-lg shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Volver a la Sala Real</span>
+            <span className="hidden sm:inline">Volver a la Sala Real</span>
+            <span className="sm:hidden">Sala</span>
           </button>
 
           {/* Interactive State Badge */}
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto min-w-0 max-w-[60%] sm:max-w-none">
             {!isFullyUnwrapped ? (
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1c100a]/90 border border-[#d4af37]/40 text-xs text-[#f1c40f] backdrop-blur-md shadow-lg">
-                <Scissors className="w-3.5 h-3.5 animate-pulse text-[#d4af37]" />
-                <span className="font-semibold">
-                  {unwrapProgress === 0
-                    ? 'Haz clic y desliza para romper el envoltorio'
-                    : `Desempaquetando: ${Math.round(unwrapProgress * 100)}%`}
-                </span>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1c100a]/90 border border-[#d4af37]/40 text-[11px] sm:text-xs text-[#f1c40f] backdrop-blur-md shadow-lg">
+                <Scissors className="w-3.5 h-3.5 animate-pulse text-[#d4af37] shrink-0" />
+                <span className="font-semibold truncate">{statusText}</span>
               </div>
             ) : (
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1c100a]/90 border border-[#22c55e]/40 text-xs text-[#4ade80] backdrop-blur-md shadow-lg">
-                <Rotate3d className="w-3.5 h-3.5 animate-spin" />
-                <span className="font-semibold">¡Desenvuelta! Arrastra con el ratón para rotar 360°</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1c100a]/90 border border-[#22c55e]/40 text-[11px] sm:text-xs text-[#4ade80] backdrop-blur-md shadow-lg">
+                <Rotate3d className="w-3.5 h-3.5 animate-spin shrink-0" />
+                <span className="font-semibold truncate">{statusText}</span>
               </div>
             )}
           </div>
         </div>
 
-        {/* Bottom Interactive Toolbar (Tear All / Rewrap / Reverse Guide) */}
-        <div className="absolute bottom-6 left-6 z-20 flex items-center gap-2 pointer-events-auto">
+        {/* Bottom Interactive Toolbar */}
+        <div className="absolute bottom-4 sm:bottom-6 left-4 sm:left-6 right-4 sm:right-6 z-20 flex flex-wrap items-center gap-2 pointer-events-auto">
           {!isFullyUnwrapped ? (
             <button
               onClick={tearAll}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2e1910] hover:bg-[#3d2215] text-xs font-bold text-[#e5c158] border border-[#d4af37]/30 shadow-xl transition-all cursor-pointer"
+              disabled={isCoreLoading}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2e1910] hover:bg-[#3d2215] text-xs font-bold text-[#e5c158] border border-[#d4af37]/30 shadow-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Scissors className="w-3.5 h-3.5" />
               <span>Rasgar Envoltorio Rápido</span>
@@ -586,11 +737,28 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
             </button>
           )}
 
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1c100a]/80 text-[11px] text-[#a08575] border border-[#d4af37]/15 backdrop-blur-sm">
-            <span>Usa la rueda del ratón hacia atrás para re-envolver</span>
-          </div>
-        </div>
+          {onOpenAr && (
+            <button
+              onClick={() => onOpenAr(product)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2e1910] hover:bg-[#3d2215] text-xs font-bold text-[#f1c40f] border border-[#d4af37]/40 shadow-xl transition-all cursor-pointer"
+              title="Ver la tableta en RA sobre una superficie real"
+            >
+              <Scan className="w-3.5 h-3.5" />
+              <span>Ver en RA</span>
+            </button>
+          )}
 
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1c100a]/80 text-[11px] text-[#a08575] border border-[#d4af37]/15 backdrop-blur-sm">
+            <span>Arrastra con el dedo o el mouse · rueda hacia atrás para reenvolver</span>
+          </div>
+
+          {/* Mobile-only compact tear hint */}
+          {!isFullyUnwrapped && (
+            <div className="sm:hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1c100a]/80 text-[11px] text-[#a08575] border border-[#d4af37]/15 backdrop-blur-sm">
+              <span>Arrastra con el dedo o el mouse para romper</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Product Specification & Heritage Card (Side Panel) */}
@@ -598,21 +766,21 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
         initial={{ opacity: 0, x: 50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full md:w-[420px] lg:w-[460px] h-auto md:h-full bg-[#180c07]/95 backdrop-blur-2xl border-t md:border-t-0 md:border-l border-[#d4af37]/30 p-6 md:p-8 flex flex-col justify-between overflow-y-auto z-20 shadow-2xl shadow-black"
+        className="w-full md:w-[420px] lg:w-[460px] flex-1 md:flex-none min-h-0 md:h-full bg-[#180c07]/95 backdrop-blur-2xl border-t md:border-t-0 md:border-l border-[#d4af37]/30 p-5 sm:p-6 md:p-8 flex flex-col justify-between overflow-y-auto z-20 shadow-2xl shadow-black"
       >
         <div>
           {/* Badge & Factory */}
           <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-xs uppercase font-extrabold tracking-widest text-[#d4af37] flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              {factory.name}
+            <span className="text-xs uppercase font-extrabold tracking-widest text-[#d4af37] flex items-center gap-1.5 truncate">
+              <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">{factory.name}</span>
             </span>
-            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#f1c40f] border border-[#d4af37]/30">
+            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#f1c40f] border border-[#d4af37]/30 shrink-0">
               {product.badge || 'Edición Suprema'}
             </span>
           </div>
 
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#fcf8f2] font-serif-luxury leading-tight mb-1">
+          <h2 className="text-xl sm:text-3xl font-extrabold text-[#fcf8f2] font-serif-luxury leading-tight mb-1">
             {product.name}
           </h2>
 
@@ -620,10 +788,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
             {product.subtitle}
           </p>
 
-          {/* Description */}
-          <p className="text-xs text-[#d7c4b7] leading-relaxed mb-5">
-            {product.description}
-          </p>
+          <p className="text-xs text-[#d7c4b7] leading-relaxed mb-5">{product.description}</p>
 
           {/* Technical Specs Grid */}
           <div className="grid grid-cols-2 gap-2.5 mb-5">
@@ -656,7 +821,9 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
                 <Package className="w-3.5 h-3.5 text-[#d4af37]" />
                 <span>Terroir de Origen</span>
               </div>
-              <span className="text-xs font-bold text-[#fcf8f2] truncate block">{product.origin}</span>
+              <span className="text-xs font-bold text-[#fcf8f2] truncate block">
+                {product.origin}
+              </span>
             </div>
           </div>
 
@@ -684,7 +851,6 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
             <span className="text-[#f1c40f] font-bold block mb-1">Maridaje Sugerido:</span>
             <span>{product.pairing}</span>
           </div>
-
         </div>
 
         {/* Footer Actions */}
@@ -696,9 +862,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
             Explorar Otros Productos de {factory.name}
           </button>
         </div>
-
       </motion.aside>
-
     </div>
   );
 };

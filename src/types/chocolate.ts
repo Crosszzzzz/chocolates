@@ -14,6 +14,10 @@ export interface ProductSpec {
   wrapperAccentColor: string;
   badge?: string;
   type: 'bar' | 'box' | 'truffle';
+  /** Optional override for the GLB model path (defaults via getModelPaths). */
+  modelGlb?: string;
+  /** Optional override for the USDZ Quick Look path (defaults via getModelPaths). */
+  modelUsdz?: string;
 }
 
 export interface HistoryMilestone {
@@ -42,4 +46,4 @@ export interface ChocolateFactory {
   products: ProductSpec[];
 }
 
-export type RoutePhase = 'archipelago' | 'diving' | 'corridor' | 'chamber' | 'unwrap';
+export type RoutePhase = 'archipelago' | 'diving' | 'corridor' | 'chamber' | 'unwrap' | 'ar';

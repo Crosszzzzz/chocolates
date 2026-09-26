@@ -471,7 +471,7 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-[#150b07] select-none">
+    <div className="relative w-full h-app overflow-hidden bg-[#150b07] select-none">
       
       {/* 3D Canvas Mount */}
       <div ref={containerRef} className="absolute inset-0 cursor-ns-resize" />

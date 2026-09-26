@@ -6,8 +6,12 @@ import { FloatingIslandsView } from './components/FloatingIslandsView';
 import { HeritageCorridorView } from './components/HeritageCorridorView';
 import { RoyalChamberView } from './components/RoyalChamberView';
 import { UnwrappingModalView } from './components/UnwrappingModalView';
+import { ArExperienceView } from './components/ArExperienceView';
 import { TourGuideModal } from './components/TourGuideModal';
 import { toggleAudio, isAudioEnabled, getAudioContext } from './utils/audio';
+
+/** Phase the user was in before opening AR — used to route "back". */
+type ArReturnPhase = 'chamber' | 'unwrap';
 
 export default function App() {
   const [currentFactory, setCurrentFactory] = useState<ChocolateFactory | null>(null);
@@ -16,6 +20,9 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [navbarVisible, setNavbarVisible] = useState<boolean>(true);
+  const [arReturnPhase, setArReturnPhase] = useState<ArReturnPhase>('chamber');
+  // Unwrap progress is lifted so AR can resume from it (and vice versa).
+  const [unwrapProgress, setUnwrapProgress] = useState<number>(0);
 
   // Initialize audio context on first user click
   useEffect(() => {
@@ -39,6 +46,9 @@ export default function App() {
       setNavbarVisible(true);
     } else if (phase === 'unwrap') {
       setNavbarVisible(true);
+    } else if (phase === 'ar') {
+      // Immersive AR provides its own HUD (dom-overlay).
+      setNavbarVisible(false);
     }
   }, [phase]);
 
@@ -69,11 +79,13 @@ export default function App() {
 
   const handleSelectProduct = (product: ProductSpec) => {
     setSelectedProduct(product);
+    setUnwrapProgress(0);
     setPhase('unwrap');
   };
 
   const handleBackToChamber = () => {
     setSelectedProduct(null);
+    setUnwrapProgress(0);
     setPhase('chamber');
   };
 
@@ -81,6 +93,7 @@ export default function App() {
     setPhase('archipelago');
     setSelectedProduct(null);
     setCurrentFactory(null);
+    setUnwrapProgress(0);
   };
 
   const handleGoToCorridor = () => {
@@ -90,9 +103,19 @@ export default function App() {
     }
   };
 
+  const handleOpenAr = (product: ProductSpec, from: ArReturnPhase) => {
+    setSelectedProduct(product);
+    setArReturnPhase(from);
+    setPhase('ar');
+  };
+
+  const handleBackFromAr = () => {
+    setPhase(arReturnPhase);
+  };
+
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#120a06] text-[#f7efe5] font-sans select-none">
-      
+    <div className="relative w-screen h-app overflow-hidden bg-[#120a06] text-[#f7efe5] font-sans select-none">
+
       {/* Dynamic Global Floating Navbar */}
       <Navbar
         currentFactory={currentFactory}
@@ -132,6 +155,7 @@ export default function App() {
             onSelectProduct={handleSelectProduct}
             onReturnToCorridor={handleGoToCorridor}
             onReturnToArchipelago={handleReturnToArchipelago}
+            onOpenAr={(product) => handleOpenAr(product, 'chamber')}
           />
         )}
 
@@ -140,6 +164,19 @@ export default function App() {
             product={selectedProduct}
             factory={currentFactory}
             onBackToChamber={handleBackToChamber}
+            onOpenAr={(product) => handleOpenAr(product, 'unwrap')}
+            initialProgress={unwrapProgress}
+            onProgressChange={setUnwrapProgress}
+          />
+        )}
+
+        {phase === 'ar' && currentFactory && selectedProduct && (
+          <ArExperienceView
+            product={selectedProduct}
+            factory={currentFactory}
+            initialProgress={unwrapProgress}
+            onProgressChange={setUnwrapProgress}
+            onBack={handleBackFromAr}
           />
         )}
       </main>

@@ -659,7 +659,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   const focusedFactory = factories[focusedIndex] || factories[0];
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-gradient-to-b from-[#180d07] via-[#221209] to-[#0e0603] select-none">
+    <div className="relative w-full h-app overflow-hidden bg-gradient-to-b from-[#180d07] via-[#221209] to-[#0e0603] select-none">
       
       {/* 3D Canvas Mount Point with Touch Action None to enable smooth touch dragging */}
       <div

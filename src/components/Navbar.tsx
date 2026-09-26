@@ -40,8 +40,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
           className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-8 py-3.5 pointer-events-none"
         >
-          <div className="max-w-7xl mx-auto flex items-center justify-between pointer-events-auto backdrop-blur-xl bg-[#1c100a]/85 border border-[#d4af37]/25 rounded-2xl px-4 sm:px-6 py-2.5 shadow-2xl shadow-black/70">
-            
+          <div className="max-w-7xl mx-auto flex flex-col pointer-events-auto backdrop-blur-xl bg-[#1c100a]/85 border border-[#d4af37]/25 rounded-2xl px-4 sm:px-6 py-2.5 shadow-2xl shadow-black/70">
+            <div className="flex items-center justify-between gap-2">
             {/* Brand / Logo */}
             <div className="flex items-center gap-3">
               <button
@@ -93,7 +93,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   onClick={onGoToChamber}
                   className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    phase === 'chamber' || phase === 'unwrap'
+                    phase === 'chamber' || phase === 'unwrap' || phase === 'ar'
                       ? 'bg-[#d4af37] text-[#1a0f08] font-bold shadow-md shadow-[#d4af37]/30'
                       : 'text-[#d7c4b7] hover:text-[#fff] hover:bg-[#2b1810]'
                   }`}
@@ -153,6 +153,36 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
           </div>
+
+          {/* Mobile/tablet stage chips — center nav must not be lg-only */}
+          {currentFactory && phase !== 'archipelago' && phase !== 'diving' && (
+            <div className="lg:hidden mt-2 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs">
+              <button
+                onClick={onGoToCorridor}
+                className={`shrink-0 px-3 py-1.5 rounded-lg transition-all cursor-pointer border ${
+                  phase === 'corridor'
+                    ? 'bg-[#d4af37] text-[#1a0f08] font-bold border-[#d4af37] shadow-md shadow-[#d4af37]/30'
+                    : 'text-[#d7c4b7] bg-[#120a06]/80 border-[#d4af37]/15 hover:text-[#fff] hover:bg-[#2b1810]'
+                }`}
+              >
+                Pasillo Histórico
+              </button>
+              <button
+                onClick={onGoToChamber}
+                className={`shrink-0 px-3 py-1.5 rounded-lg transition-all cursor-pointer border ${
+                  phase === 'chamber' || phase === 'unwrap' || phase === 'ar'
+                    ? 'bg-[#d4af37] text-[#1a0f08] font-bold border-[#d4af37] shadow-md shadow-[#d4af37]/30'
+                    : 'text-[#d7c4b7] bg-[#120a06]/80 border-[#d4af37]/15 hover:text-[#fff] hover:bg-[#2b1810]'
+                }`}
+              >
+                Sala Real de Productos
+              </button>
+              <span className="shrink-0 px-2.5 py-1.5 rounded-lg text-[#8a7265] bg-[#120a06]/60 border border-[#d4af37]/10 truncate max-w-[10rem]">
+                {currentFactory.name}
+              </span>
+            </div>
+          )}
+        </div>
         </motion.header>
       )}
     </AnimatePresence>

@@ -14,6 +14,22 @@
   }
 }
 
+/* Full-viewport height with iOS Safari dvh fallback chain.
+   Defined AFTER tailwind's import so it overrides h-screen when combined. */
+.h-app {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Horizontal chip rows (navbar mobile nav) without visible scrollbars. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Custom smooth dark chocolate scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
