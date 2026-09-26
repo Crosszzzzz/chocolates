@@ -42,6 +42,8 @@ export interface ChocolateFactory {
   brandColor: string;
   accentColor: string;
   islandPosition: [number, number, number];
+  /** Optional photo-texture facade (e.g. '/factories/para-ti/facade.webp'). Falls back to procedural. */
+  facade?: string;
   historyMilestones: HistoryMilestone[];
   products: ProductSpec[];
 }

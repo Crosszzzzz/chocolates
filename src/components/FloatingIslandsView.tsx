@@ -60,6 +60,8 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   const targetLookAt = useRef(new THREE.Vector3(0, 1.0, 1.2));
   const currentLookAt = useRef(new THREE.Vector3(0, 1.0, 1.2));
   const mousePos = useRef({ x: 0, y: 0 });
+  const cameraDistRef = useRef<number>(5.9);
+  const prefersReducedMotionRef = useRef<boolean>(false);
 
   // Pointer drag state for tactile swiping
   const pointerState = useRef({
@@ -156,9 +158,31 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     sceneRef.current = scene;
     scene.fog = new THREE.FogExp2(0x130905, 0.045);
 
-    // 2. Camera Setup
+    // 2. Camera Setup (responsive: portrait pulls back + widens fov)
+    const getResponsiveCamera = (w: number, h: number) => {
+      const aspect = w / Math.max(h, 1);
+      let fov = 45;
+      let dist = 5.9;
+      if (aspect < 0.8) {
+        fov = 62;
+        dist = 9.2;
+      } else if (aspect < 1.2) {
+        fov = 54;
+        dist = 7.4;
+      }
+      return { fov, dist };
+    };
+    prefersReducedMotionRef.current =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const initialResponsive = getResponsiveCamera(
+      container.clientWidth,
+      container.clientHeight
+    );
+    cameraDistRef.current = initialResponsive.dist;
     const camera = new THREE.PerspectiveCamera(
-      45,
+      initialResponsive.fov,
       container.clientWidth / container.clientHeight,
       0.1,
       100
@@ -271,70 +295,166 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       group.add(haloRing);
       haloRingsRef.current[factory.id] = haloRing;
 
-      // Architectural Feature for each Factory
+      // Architectural Feature for each Factory (procedural + optional photo facade)
+      const applyFacadeTexture = (body: THREE.Mesh, facade?: string) => {
+        if (!facade) return;
+        new THREE.TextureLoader().load(
+          facade,
+          (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            const mat = body.material as THREE.MeshStandardMaterial;
+            mat.map = tex;
+            mat.needsUpdate = true;
+          },
+          undefined,
+          () => {
+            // 404 or missing file -> keep improved procedural fallback
+          }
+        );
+      };
+
       if (factory.id === 'para-ti') {
-        // Red and Gold Sucre Clock Tower & Cocoa Pod
-        const towerBase = new THREE.Mesh(
-          new THREE.BoxGeometry(0.8, 1.4, 0.8),
-          new THREE.MeshStandardMaterial({ color: 0xb01919, roughness: 0.4 })
+        // Para Ti — esquina blanca industrial: cuerpo hueso + zocalo piedra,
+        // tira de ventanas verticales, remate noche, letrero dorado, arboles + reja
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(1.8, 1.1, 1.0),
+          new THREE.MeshStandardMaterial({ color: 0xf5f0e6, roughness: 0.8 })
         );
-        towerBase.position.set(0, 0.9, 0);
-        towerBase.castShadow = true;
-        group.add(towerBase);
+        body.position.set(0, 0.85, 0);
+        body.castShadow = true;
+        group.add(body);
+        applyFacadeTexture(body, factory.facade);
 
-        const dome = new THREE.Mesh(
-          new THREE.SphereGeometry(0.5, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.5),
-          new THREE.MeshStandardMaterial({ color: 0xf1c40f, metalness: 0.7, roughness: 0.25 })
+        const plinth = new THREE.Mesh(
+          new THREE.BoxGeometry(1.85, 0.25, 1.05),
+          new THREE.MeshStandardMaterial({ color: 0xc9b48a, roughness: 0.85 })
         );
-        dome.position.set(0, 1.6, 0);
-        group.add(dome);
+        plinth.position.set(0, 0.32, 0);
+        group.add(plinth);
 
-        const treeTrunk = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.08, 0.1, 0.7, 5),
-          new THREE.MeshStandardMaterial({ color: 0x5c3317 })
-        );
-        treeTrunk.position.set(0.9, 0.5, 0.6);
-        group.add(treeTrunk);
+        const glassMat = new THREE.MeshStandardMaterial({
+          color: 0x2b3a4a,
+          roughness: 0.35,
+          emissive: 0x1a2733,
+          emissiveIntensity: 0.35
+        });
+        for (let i = 0; i < 6; i++) {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 0.02), glassMat);
+          win.position.set(-0.62 + i * 0.25, 0.9, 0.51);
+          group.add(win);
+        }
 
-        const treeFoliage = new THREE.Mesh(
-          new THREE.DodecahedronGeometry(0.4, 1),
-          new THREE.MeshStandardMaterial({ color: 0x1b4d20, roughness: 0.8 })
+        const crown = new THREE.Mesh(
+          new THREE.BoxGeometry(1.2, 0.4, 0.7),
+          new THREE.MeshStandardMaterial({ color: 0x1c2b4a, roughness: 0.8 })
         );
-        treeFoliage.position.set(0.9, 1.0, 0.6);
-        group.add(treeFoliage);
+        crown.position.set(0, 1.6, -0.05);
+        group.add(crown);
 
-        const pod = new THREE.Mesh(
-          new THREE.ConeGeometry(0.12, 0.35, 6),
-          new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.8, roughness: 0.3 })
+        const sign = new THREE.Mesh(
+          new THREE.BoxGeometry(0.7, 0.18, 0.02),
+          new THREE.MeshStandardMaterial({
+            color: 0xd4af37,
+            roughness: 0.5,
+            emissive: 0x664d0f,
+            emissiveIntensity: 0.6
+          })
         );
-        pod.rotation.z = Math.PI * 0.85;
-        pod.position.set(0.85, 0.8, 0.6);
-        group.add(pod);
+        sign.position.set(0, 1.25, 0.52);
+        group.add(sign);
+
+        // 2 arboles laterales
+        [[-1.15, 0.5], [1.15, 0.5]].forEach(([tx, tz]) => {
+          const trunk = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.06, 0.08, 0.5, 5),
+            new THREE.MeshStandardMaterial({ color: 0x5c3317, roughness: 0.8 })
+          );
+          trunk.position.set(tx, 0.5, tz);
+          group.add(trunk);
+          const foliage = new THREE.Mesh(
+            new THREE.DodecahedronGeometry(0.32, 1),
+            new THREE.MeshStandardMaterial({ color: 0x1b4d20, roughness: 0.8 })
+          );
+          foliage.position.set(tx, 0.95, tz);
+          group.add(foliage);
+        });
+
+        // Reja baja frontal
+        const fence = new THREE.Mesh(
+          new THREE.BoxGeometry(1.9, 0.12, 0.04),
+          new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.6, metalness: 0.4 })
+        );
+        fence.position.set(0, 0.4, 1.0);
+        group.add(fence);
 
       } else if (factory.id === 'chocolates-sucre') {
-        // Sucre "Ciudad Blanca" Colonial Bell Gable & Chocolate Cascade
-        const churchWall = new THREE.Mesh(
-          new THREE.BoxGeometry(1.6, 1.2, 0.3),
-          new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.6 })
+        // Sucre — casa colonial blanca con zocalo piedra, techo teja piramidal,
+        // puerta madera, capillita calida y farola
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(1.7, 0.9, 0.9),
+          new THREE.MeshStandardMaterial({ color: 0xf8f5ee, roughness: 0.8 })
         );
-        churchWall.position.set(-0.2, 0.85, 0);
-        churchWall.castShadow = true;
-        group.add(churchWall);
+        body.position.set(-0.1, 0.75, 0);
+        body.castShadow = true;
+        group.add(body);
+        applyFacadeTexture(body, factory.facade);
 
-        const archTop = new THREE.Mesh(
-          new THREE.BoxGeometry(1.1, 0.7, 0.3),
-          new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.6 })
+        const plinth = new THREE.Mesh(
+          new THREE.BoxGeometry(1.75, 0.28, 0.95),
+          new THREE.MeshStandardMaterial({ color: 0x8a6f5c, roughness: 0.85 })
         );
-        archTop.position.set(-0.2, 1.6, 0);
-        group.add(archTop);
+        plinth.position.set(-0.1, 0.32, 0);
+        group.add(plinth);
 
-        const bell = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.1, 0.22, 0.3, 8),
-          new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.2 })
+        // Techo teja: piramide de 4 lados rotada 45°
+        const roofGeo = new THREE.CylinderGeometry(0, 1.15, 0.5, 4);
+        const roof = new THREE.Mesh(
+          roofGeo,
+          new THREE.MeshStandardMaterial({ color: 0xa34a28, roughness: 0.8, flatShading: true })
         );
-        bell.position.set(-0.2, 1.5, 0);
-        group.add(bell);
+        roof.rotation.y = Math.PI / 4;
+        roof.position.set(-0.1, 1.45, 0);
+        group.add(roof);
 
+        const door = new THREE.Mesh(
+          new THREE.BoxGeometry(0.3, 0.6, 0.03),
+          new THREE.MeshStandardMaterial({ color: 0x5b3a22, roughness: 0.8 })
+        );
+        door.position.set(-0.1, 0.55, 0.47);
+        group.add(door);
+
+        // Capillita con luz calida
+        const chapel = new THREE.Mesh(
+          new THREE.BoxGeometry(0.25, 0.35, 0.06),
+          new THREE.MeshStandardMaterial({
+            color: 0xfff2d9,
+            roughness: 0.7,
+            emissive: 0xffb45e,
+            emissiveIntensity: 0.55
+          })
+        );
+        chapel.position.set(0.55, 0.85, 0.46);
+        group.add(chapel);
+
+        // Farola pequeña
+        const lampPost = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.03, 0.04, 0.7, 6),
+          new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.6 })
+        );
+        lampPost.position.set(-0.9, 0.6, 0.7);
+        group.add(lampPost);
+        const lampHead = new THREE.Mesh(
+          new THREE.SphereGeometry(0.07, 8, 8),
+          new THREE.MeshStandardMaterial({
+            color: 0xffe6b0,
+            emissive: 0xffc46b,
+            emissiveIntensity: 0.9
+          })
+        );
+        lampHead.position.set(-0.9, 1.0, 0.7);
+        group.add(lampHead);
+
+        // Cascada de chocolate (legado visual)
         const cascadeGeo = new THREE.PlaneGeometry(0.45, 1.8, 4, 12);
         cascadeGeo.rotateX(-0.35);
         const cascadeMat = new THREE.MeshStandardMaterial({
@@ -348,29 +468,73 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         group.add(cascade);
 
       } else if (factory.id === 'taboada') {
-        // Taboada 1948 - Historic red brick factory with industrial chimney & steam
-        const factoryBuilding = new THREE.Mesh(
-          new THREE.BoxGeometry(1.4, 0.9, 1.1),
-          new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.8 })
+        // Taboada — fachada piedra iluminada, porton madera, spots, mastil + furgoneta
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(1.7, 1.2, 0.9),
+          new THREE.MeshStandardMaterial({ color: 0xd8cfb8, roughness: 0.8 })
         );
-        factoryBuilding.position.set(0.1, 0.65, 0);
-        factoryBuilding.castShadow = true;
-        group.add(factoryBuilding);
+        body.position.set(0.1, 0.8, 0);
+        body.castShadow = true;
+        group.add(body);
+        applyFacadeTexture(body, factory.facade);
 
-        const chimney = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.16, 0.24, 1.6, 8),
-          new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.7 })
-        );
-        chimney.position.set(-0.5, 1.3, -0.2);
-        chimney.castShadow = true;
-        group.add(chimney);
+        // Pilastras laterales marron
+        [-0.85, 1.05].forEach((px) => {
+          const pillar = new THREE.Mesh(
+            new THREE.BoxGeometry(0.18, 1.25, 0.95),
+            new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.8 })
+          );
+          pillar.position.set(px, 0.8, 0);
+          group.add(pillar);
+        });
 
-        const gear = new THREE.Mesh(
-          new THREE.TorusGeometry(0.28, 0.08, 8, 16),
-          new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.8, roughness: 0.3 })
+        // Porton madera
+        const gate = new THREE.Mesh(
+          new THREE.BoxGeometry(0.5, 0.75, 0.03),
+          new THREE.MeshStandardMaterial({ color: 0x4a2c17, roughness: 0.8 })
         );
-        gear.position.set(0.1, 0.65, 0.58);
-        group.add(gear);
+        gate.position.set(0.1, 0.6, 0.47);
+        group.add(gate);
+
+        // 3 spots calidos sobre la fachada
+        const spotMat = new THREE.MeshStandardMaterial({
+          color: 0xfff6e0,
+          emissive: 0xffe0a3,
+          emissiveIntensity: 1.0
+        });
+        [-0.4, 0.1, 0.6].forEach((sx) => {
+          const spot = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.05), spotMat);
+          spot.position.set(sx, 1.25, 0.47);
+          group.add(spot);
+        });
+
+        // Mastil fino + bandera
+        const mast = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.02, 0.02, 1.0, 6),
+          new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.6 })
+        );
+        mast.position.set(0.85, 1.6, -0.2);
+        group.add(mast);
+        const flag = new THREE.Mesh(
+          new THREE.BoxGeometry(0.3, 0.18, 0.01),
+          new THREE.MeshStandardMaterial({ color: 0xb01919, roughness: 0.8 })
+        );
+        flag.position.set(1.0, 1.95, -0.2);
+        group.add(flag);
+
+        // Furgoneta blanca simple al frente
+        const vanBody = new THREE.Mesh(
+          new THREE.BoxGeometry(0.55, 0.28, 0.28),
+          new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.8 })
+        );
+        vanBody.position.set(-0.35, 0.42, 0.95);
+        group.add(vanBody);
+        const vanCab = new THREE.Mesh(
+          new THREE.BoxGeometry(0.22, 0.22, 0.26),
+          new THREE.MeshStandardMaterial({ color: 0xdfe6ee, roughness: 0.8 })
+        );
+        vanCab.position.set(0.02, 0.4, 0.95);
+        group.add(vanCab);
       }
 
       // Hitbox cylinder for raycasting click / focus
@@ -543,9 +707,22 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
 
     const handleResize = () => {
       if (!container || !renderer || !camera) return;
-      camera.aspect = container.clientWidth / container.clientHeight;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      const aspect = w / Math.max(h, 1);
+      if (aspect < 0.8) {
+        camera.fov = 62;
+        cameraDistRef.current = 9.2;
+      } else if (aspect < 1.2) {
+        camera.fov = 54;
+        cameraDistRef.current = 7.4;
+      } else {
+        camera.fov = 45;
+        cameraDistRef.current = 5.9;
+      }
       camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setSize(w, h);
     };
 
     window.addEventListener('resize', handleResize);
@@ -562,8 +739,8 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       const delta = clock.getDelta();
       const elapsed = clock.getElapsedTime();
 
-      // Rotate dust particles smoothly
-      if (dustParticlesRef.current) {
+      // Rotate dust particles smoothly (skip when reduced motion)
+      if (dustParticlesRef.current && !prefersReducedMotionRef.current) {
         dustParticlesRef.current.rotation.y += delta * 0.025;
       }
 
@@ -582,14 +759,16 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         // Hero elevation for the focused island + gentle hover on center island only
         const focusLift = isFocused ? 0.32 : 0;
         const hoverLift = isHovered ? 0.12 : 0; // "pequeño hover"
-        const bob = Math.sin(elapsed * 1.5 + i * 2.1) * (isFocused ? 0.12 : 0.07);
+        const bob = prefersReducedMotionRef.current
+          ? 0
+          : Math.sin(elapsed * 1.5 + i * 2.1) * (isFocused ? 0.12 : 0.07);
 
         const targetY = factory.islandPosition[1] + bob + focusLift + hoverLift;
         group.position.y = THREE.MathUtils.lerp(group.position.y, targetY, 0.1);
         group.rotation.y = Math.sin(elapsed * 0.3 + i) * 0.05;
 
         // Subtle scale: focused island is prominent, with a gentle touch on hover
-        const targetScale = isFocused ? (isHovered ? 1.08 : 1.04) : 0.92;
+        const targetScale = isFocused ? (isHovered ? 1.08 : 1.06) : 0.88;
         group.scale.setScalar(
           THREE.MathUtils.lerp(group.scale.x, targetScale, 0.08)
         );
@@ -617,7 +796,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         targetCameraPos.current.set(
           fx + mousePos.current.x * 0.6 - dragInfluence,
           fy + 2.3 + mousePos.current.y * 0.35,
-          fz + 5.9
+          fz + cameraDistRef.current
         );
 
         targetLookAt.current.set(
@@ -627,9 +806,10 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         );
       }
 
-      // Smooth camera interpolation for cinematic feel
-      currentCameraPos.current.lerp(targetCameraPos.current, 0.045);
-      currentLookAt.current.lerp(targetLookAt.current, 0.045);
+      // Smooth camera interpolation for cinematic feel (instant when reduced motion)
+      const lerpFactor = prefersReducedMotionRef.current ? 1 : 0.045;
+      currentCameraPos.current.lerp(targetCameraPos.current, lerpFactor);
+      currentLookAt.current.lerp(targetLookAt.current, lerpFactor);
 
       camera.position.copy(currentCameraPos.current);
       camera.lookAt(currentLookAt.current);
@@ -671,7 +851,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       <div className="absolute inset-0 pointer-events-none bg-radial-[at_50%_40%] from-transparent via-[#140a05]/40 to-[#0c0502]/90" />
 
       {/* Header Overlay / Title with drag gesture badge */}
-      <div className="absolute top-20 left-0 right-0 z-10 text-center pointer-events-none px-4">
+      <div className="absolute top-14 md:top-20 left-0 right-0 z-10 text-center pointer-events-none px-4">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -688,7 +868,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.9, delay: 0.3 }}
-          className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-[#fcf8f2] tracking-tight font-royal"
+          className="text-2xl sm:text-5xl md:text-6xl font-extrabold text-[#fcf8f2] tracking-tight font-royal"
         >
           Ruta del Chocolate de Sucre
         </motion.h2>
@@ -718,7 +898,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       <button
         onClick={goToPrevIsland}
         aria-label="Isla anterior"
-        className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 z-20 w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-[#1c100a]/80 hover:bg-[#2b170e] border border-[#d4af37]/35 hover:border-[#d4af37] text-[#e5c158] hover:text-[#fff] backdrop-blur-xl shadow-2xl shadow-black/70 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer group"
+        className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 z-20 w-11 h-11 sm:w-13 sm:h-13 min-h-[44px] min-w-[44px] focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:outline-none rounded-2xl bg-[#1c100a]/80 hover:bg-[#2b170e] border border-[#d4af37]/35 hover:border-[#d4af37] text-[#e5c158] hover:text-[#fff] backdrop-blur-xl shadow-2xl shadow-black/70 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer group"
       >
         <ChevronLeft className="w-6 h-6 group-hover:-translate-x-0.5 transition-transform" />
       </button>
@@ -726,7 +906,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       <button
         onClick={goToNextIsland}
         aria-label="Siguiente isla"
-        className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 z-20 w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-[#1c100a]/80 hover:bg-[#2b170e] border border-[#d4af37]/35 hover:border-[#d4af37] text-[#e5c158] hover:text-[#fff] backdrop-blur-xl shadow-2xl shadow-black/70 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer group"
+        className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 z-20 w-11 h-11 sm:w-13 sm:h-13 min-h-[44px] min-w-[44px] focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:outline-none rounded-2xl bg-[#1c100a]/80 hover:bg-[#2b170e] border border-[#d4af37]/35 hover:border-[#d4af37] text-[#e5c158] hover:text-[#fff] backdrop-blur-xl shadow-2xl shadow-black/70 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer group"
       >
         <ChevronRight className="w-6 h-6 group-hover:translate-x-0.5 transition-transform" />
       </button>
@@ -742,7 +922,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             className="absolute bottom-20 md:bottom-22 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
           >
-            <div className="bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl p-4 sm:p-5 shadow-2xl shadow-black/90">
+            <div className="bg-[#1c100a]/95 backdrop-blur border border-[#d4af37]/45 rounded-2xl p-4 sm:p-5 shadow-2xl shadow-black/90">
               
               {/* Card Header */}
               <div className="flex items-start justify-between gap-3 mb-2">
@@ -770,7 +950,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
               </div>
 
               {/* Description */}
-              <p className="text-xs text-[#d7c4b7] line-clamp-2 mb-3 leading-relaxed">
+              <p className="text-xs text-[#d7c4b7] line-clamp-3 mb-3 leading-relaxed">
                 {focusedFactory.description}
               </p>
 
@@ -788,12 +968,16 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                       key={f.id}
                       onClick={() => selectIslandByIndex(idx)}
                       aria-label={`Ver fábrica ${f.name}`}
-                      className={`transition-all duration-300 rounded-full cursor-pointer ${
-                        idx === focusedIndex
-                          ? 'w-6 h-2 bg-gradient-to-r from-[#d4af37] to-[#e5c158] shadow-sm shadow-[#d4af37]'
-                          : 'w-2 h-2 bg-[#4a2e1f] hover:bg-[#8b5a2b]'
-                      }`}
-                    />
+                      className="min-h-[44px] min-w-[44px] -m-2 p-2 flex items-center justify-center rounded-full cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:outline-none"
+                    >
+                      <span
+                        className={`block transition-all duration-300 rounded-full ${
+                          idx === focusedIndex
+                            ? 'w-6 h-2 bg-gradient-to-r from-[#d4af37] to-[#e5c158] shadow-sm shadow-[#d4af37]'
+                            : 'w-2 h-2 bg-[#4a2e1f] hover:bg-[#8b5a2b]'
+                        }`}
+                      />
+                    </button>
                   ))}
                 </div>
 

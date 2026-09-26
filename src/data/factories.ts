@@ -13,7 +13,8 @@ export const FACTORIES: ChocolateFactory[] = [
     islandColor: '#d63031',
     brandColor: '#b01919',
     accentColor: '#f1c40f',
-    islandPosition: [-3.8, 0.4, -1],
+    islandPosition: [-6.8, 0.4, -1],
+    facade: '/factories/para-ti/facade.webp',
     historyMilestones: [
       {
         year: '1989',
@@ -113,6 +114,7 @@ export const FACTORIES: ChocolateFactory[] = [
     brandColor: '#1a365d',
     accentColor: '#38bdf8',
     islandPosition: [0, 0.9, 1.2],
+    facade: '/factories/sucre/facade.webp',
     historyMilestones: [
       {
         year: '1780',
@@ -203,7 +205,8 @@ export const FACTORIES: ChocolateFactory[] = [
     islandColor: '#e67e22',
     brandColor: '#b45309',
     accentColor: '#fbbf24',
-    islandPosition: [3.8, -0.3, -1],
+    islandPosition: [6.8, -0.3, -1],
+    facade: '/factories/taboada/facade.webp',
     historyMilestones: [
       {
         year: '1948',
