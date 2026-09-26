@@ -1,7 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Compass, Volume2, VolumeX, Landmark, Sparkles, ChevronRight, HelpCircle, RotateCcw } from 'lucide-react';
+import { Compass, Volume2, VolumeX, Landmark, Sparkles, ChevronRight, HelpCircle, RotateCcw, LogIn, LogOut } from 'lucide-react';
 import { ChocolateFactory, RoutePhase } from '../types/chocolate';
+import { useAuth } from '../contexts/AuthContext';
 
 interface NavbarProps {
   currentFactory: ChocolateFactory | null;
@@ -30,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onGoToCorridor,
   onOpenGuide
 }) => {
+  const { user, isLoading, errorEs, signInWithGoogle, signOut } = useAuth();
   return (
     <AnimatePresence>
       {visible && (
@@ -150,7 +152,35 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <HelpCircle className="w-4 h-4 text-[#e5c158]" />
               </button>
+
+              {/* Social auth (PR2): Google session, Spanish strings, no 3D impact */}
+              {user ? (
+                <button
+                  onClick={signOut}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-[#2e1910] text-[#e5c158] hover:bg-[#3d2215] border border-[#d4af37]/30 transition-all cursor-pointer"
+                  title={user.email ?? 'Sesión iniciada'}
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline max-w-[10rem] truncate">Cerrar sesión</span>
+                </button>
+              ) : (
+                <button
+                  onClick={signInWithGoogle}
+                  disabled={isLoading}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-[#d4af37] text-[#1a0f08] font-bold hover:bg-[#e5c158] border border-[#d4af37] transition-all cursor-pointer disabled:opacity-60"
+                  title={errorEs ?? 'Iniciar sesión con Google'}
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{isLoading ? 'Cargando…' : 'Iniciar sesión'}</span>
+                </button>
+              )}
             </div>
+
+            {errorEs && !user && (
+              <p role="alert" className="mt-1.5 text-[11px] text-[#f0a6a6]">
+                {errorEs}
+              </p>
+            )}
 
           </div>
         </motion.header>
