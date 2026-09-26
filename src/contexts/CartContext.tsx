@@ -23,6 +23,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     warning,
     add: (sku, stock) => {
       if (stock <= 0) { setWarning('Sin stock'); return }
+      setWarning(null);
       setLines((prev) => {
         const found = prev.find((l) => l.sku === sku);
         if (!found) return [...prev, { sku, qty: 1 }];
@@ -34,6 +35,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setQty: (sku, qty, stock) => {
       const next = Math.max(1, Math.min(qty, Math.max(stock, 1)));
       if (qty > stock) setWarning(`Solo quedan ${stock} unidades`);
+      else setWarning(null);
       setLines((prev) => prev.map((l) => (l.sku === sku ? { ...l, qty: next } : l)));
     },
     clear: () => setLines([]),

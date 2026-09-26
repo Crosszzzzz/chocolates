@@ -48,7 +48,7 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
   return (
     <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Administración del catálogo">
       <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-      <div className="relative w-full sm:max-w-lg bg-[#1c100a] border border-[#d4af37]/30 rounded-t-2xl sm:rounded-2xl p-5 max-h-[85vh] overflow-y-auto">
+      <div className="relative w-full sm:max-w-lg bg-[#1c100a] border border-[#d4af37]/30 rounded-t-2xl sm:rounded-2xl p-5 max-h-[85dvh] overflow-y-auto">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-base font-bold text-[#fcf8f2]">Administración</h2>
           <button onClick={() => setOpen(false)} aria-label="Cerrar administración" className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/25 cursor-pointer"><X className="w-4 h-4" /></button>
