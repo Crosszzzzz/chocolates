@@ -43,3 +43,28 @@ export interface ChocolateFactory {
 }
 
 export type RoutePhase = 'archipelago' | 'diving' | 'corridor' | 'chamber' | 'unwrap';
+
+// --- Commerce foundation (PR1, mvp-completo) ---
+// Extends the static 3D catalog without changing existing ProductSpec behavior.
+// DB-backed listing (PR3) maps Supabase rows onto CommerceProduct; 3D views stay untouched.
+
+export interface CommerceProduct extends ProductSpec {
+  sku: string;
+  priceBOB: number;
+  stock: number;
+  imageUrl?: string;
+}
+
+export interface CartLine {
+  sku: string;
+  qty: number;
+}
+
+export type FulfillmentKind = 'pickup' | 'delivery-sucre';
+
+export interface Order {
+  id: string;
+  totalBOB: number;
+  fulfillment: FulfillmentKind;
+  status: 'reserved';
+}
