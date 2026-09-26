@@ -6,10 +6,9 @@ import {
   ArrowRight,
   Calendar,
   MapPin,
-  Compass,
   ChevronLeft,
   ChevronRight,
-  Hand
+  ChevronDown
 } from 'lucide-react';
 import { ChocolateFactory } from '../types/chocolate';
 import {
@@ -35,6 +34,9 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   const [focusedIndex, setFocusedIndex] = useState<number>(1);
   const focusedIndexRef = useRef<number>(1);
   focusedIndexRef.current = focusedIndex;
+
+  // Collapsible HUD card: collapsed by default, resets on island change
+  const [isCardExpanded, setIsCardExpanded] = useState<boolean>(false);
 
   const [hoveredFactory, setHoveredFactory] = useState<ChocolateFactory | null>(null);
   const hoveredFactoryRef = useRef<ChocolateFactory | null>(null);
@@ -78,6 +80,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   // Navigation handlers
   const goToNextIsland = useCallback(() => {
     if (activeFactoryRef.current) return;
+    setIsCardExpanded(false);
     setFocusedIndex((prev) => {
       const next = (prev + 1) % factories.length;
       playIslandSlideSound();
@@ -87,6 +90,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
 
   const goToPrevIsland = useCallback(() => {
     if (activeFactoryRef.current) return;
+    setIsCardExpanded(false);
     setFocusedIndex((prev) => {
       const next = (prev - 1 + factories.length) % factories.length;
       playIslandSlideSound();
@@ -97,6 +101,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   const selectIslandByIndex = useCallback((index: number) => {
     if (activeFactoryRef.current) return;
     if (index >= 0 && index < factories.length) {
+      setIsCardExpanded(false);
       setFocusedIndex(index);
       playIslandSlideSound();
     }
@@ -119,7 +124,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     );
     targetLookAt.current.set(
       factory.islandPosition[0],
-      factory.islandPosition[1] + 0.4,
+      factory.islandPosition[1] - 0.1,
       factory.islandPosition[2]
     );
 
@@ -165,7 +170,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       let dist = 5.9;
       if (aspect < 0.8) {
         fov = 62;
-        dist = 9.2;
+        dist = 9.8;
       } else if (aspect < 1.2) {
         fov = 54;
         dist = 7.4;
@@ -313,6 +318,38 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         );
       };
 
+      // Para Ti: foto real recortada al edificio central (cielo/calle/camionetas fuera),
+      // aplicada SOLO a la cara frontal (+z) con multi-material; laterales = enlucido.
+      const PARA_TI_FACADE_CROP = { repeatX: 0.62, repeatY: 0.55, offsetX: 0.19, offsetY: 0.28 };
+      const applyParaTiFacade = (body: THREE.Mesh, facade?: string) => {
+        if (!facade) return;
+        new THREE.TextureLoader().load(
+          facade,
+          (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.wrapS = THREE.ClampToEdgeWrapping;
+            tex.wrapT = THREE.ClampToEdgeWrapping;
+            tex.repeat.set(PARA_TI_FACADE_CROP.repeatX, PARA_TI_FACADE_CROP.repeatY);
+            tex.offset.set(PARA_TI_FACADE_CROP.offsetX, PARA_TI_FACADE_CROP.offsetY);
+            const side = body.material as THREE.MeshStandardMaterial;
+            const front = new THREE.MeshStandardMaterial({
+              color: 0xffffff,
+              map: tex,
+              emissive: 0x332211,
+              emissiveIntensity: 0.25,
+              emissiveMap: tex,
+              roughness: 0.8
+            });
+            // Box material order: [+x, -x, +y, -y, +z frontal, -z]
+            body.material = [side, side, side, side, front, side];
+          },
+          undefined,
+          () => {
+            // missing file -> keep procedural fallback intact
+          }
+        );
+      };
+
       if (factory.id === 'para-ti') {
         // Para Ti — esquina blanca industrial: cuerpo hueso + zocalo piedra,
         // tira de ventanas verticales, remate noche, letrero dorado, arboles + reja
@@ -323,7 +360,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         body.position.set(0, 0.85, 0);
         body.castShadow = true;
         group.add(body);
-        applyFacadeTexture(body, factory.facade);
+        applyParaTiFacade(body, factory.facade);
 
         const plinth = new THREE.Mesh(
           new THREE.BoxGeometry(1.85, 0.25, 1.05),
@@ -713,7 +750,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       const aspect = w / Math.max(h, 1);
       if (aspect < 0.8) {
         camera.fov = 62;
-        cameraDistRef.current = 9.2;
+        cameraDistRef.current = 9.8;
       } else if (aspect < 1.2) {
         camera.fov = 54;
         cameraDistRef.current = 7.4;
@@ -799,9 +836,14 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
           fz + cameraDistRef.current
         );
 
+        // Vertical air: hero gone + collapsed card -> frame the island higher.
+        // Desktop aims slightly below center (fy - 0.1), portrait lower (fy - 0.6).
+        const frameAspect = container.clientWidth / Math.max(container.clientHeight, 1);
+        const lookYOffset = frameAspect < 0.8 ? -0.6 : -0.1;
+
         targetLookAt.current.set(
           fx - dragInfluence * 0.35,
-          fy + 0.4,
+          fy + lookYOffset,
           fz
         );
       }
@@ -850,50 +892,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       {/* Atmospheric Vignette & Horizon Glow */}
       <div className="absolute inset-0 pointer-events-none bg-radial-[at_50%_40%] from-transparent via-[#140a05]/40 to-[#0c0502]/90" />
 
-      {/* Header Overlay / Title with drag gesture badge */}
-      <div className="absolute top-14 md:top-20 left-0 right-0 z-10 text-center pointer-events-none px-4">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#2b170e]/80 border border-[#d4af37]/30 backdrop-blur-md mb-2 shadow-lg shadow-black/40"
-        >
-          <Compass className="w-4 h-4 text-[#d4af37] animate-pulse" />
-          <span className="text-xs font-semibold tracking-widest uppercase text-[#e5c158]">
-            Archipiélago de Fábricas Patrimoniales
-          </span>
-        </motion.div>
-
-        <motion.h2
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.9, delay: 0.3 }}
-          className="text-2xl sm:text-5xl md:text-6xl font-extrabold text-[#fcf8f2] tracking-tight font-royal"
-        >
-          Ruta del Chocolate de Sucre
-        </motion.h2>
-
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.5 }}
-          className="mt-1 text-xs sm:text-sm text-[#d7c4b7] max-w-xl mx-auto font-light"
-        >
-          Desliza o arrastra con el puntero para recorrer las islas flotantes y descubrir sus historias.
-        </motion.p>
-
-        {/* Tactile drag guide hint */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.7 }}
-          className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1c100a]/75 border border-[#d4af37]/25 backdrop-blur-md text-[11px] text-[#e5c158]/90 shadow-md"
-        >
-          <Hand className="w-3.5 h-3.5 text-[#d4af37] animate-bounce" />
-          <span>Arrastra o desliza hacia los lados para cambiar de isla</span>
-        </motion.div>
-      </div>
-
       {/* Floating Left & Right Navigation Chevrons */}
       <button
         onClick={goToPrevIsland}
@@ -911,7 +909,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         <ChevronRight className="w-6 h-6 group-hover:translate-x-0.5 transition-transform" />
       </button>
 
-      {/* Focused Island HUD Card (Always present and reactive) */}
+      {/* Focused Island HUD Card (collapsible: name + year by default) */}
       <AnimatePresence mode="wait">
         {focusedFactory && !activeFactory && (
           <motion.div
@@ -922,74 +920,96 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             className="absolute bottom-20 md:bottom-22 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
           >
-            <div className="bg-[#1c100a]/95 backdrop-blur border border-[#d4af37]/45 rounded-2xl p-4 sm:p-5 shadow-2xl shadow-black/90">
-              
-              {/* Card Header */}
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full ring-2 ring-[#d4af37]/30"
-                      style={{ backgroundColor: focusedFactory.accentColor }}
-                    />
-                    <span className="text-xs uppercase font-bold tracking-wider text-[#d4af37]">
-                      Fábrica Emblemática
-                    </span>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-bold text-[#fcf8f2] font-serif-luxury mt-0.5">
+            <div className="bg-[#1c100a]/95 backdrop-blur border border-[#d4af37]/45 rounded-2xl shadow-2xl shadow-black/90 overflow-hidden">
+
+              {/* Collapsed header: always visible (~64px) */}
+              <button
+                onClick={() => setIsCardExpanded((v) => !v)}
+                aria-expanded={isCardExpanded}
+                aria-label={isCardExpanded ? `Colapsar ${focusedFactory.name}` : `Expandir ${focusedFactory.name}`}
+                className="w-full flex items-center justify-between gap-3 min-h-[64px] px-4 sm:px-5 py-2 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:outline-none text-left"
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full ring-2 ring-[#d4af37]/30 shrink-0"
+                    style={{ backgroundColor: focusedFactory.accentColor }}
+                  />
+                  <span className="text-base sm:text-lg font-bold text-[#fcf8f2] font-serif-luxury truncate">
                     {focusedFactory.name}
-                  </h3>
-                  <p className="text-[11px] text-[#e5c158] italic font-serif-luxury">
-                    "{focusedFactory.slogan}"
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#2e1910] border border-[#d4af37]/30 text-xs text-[#e5c158] font-semibold">
-                  <Calendar className="w-3.5 h-3.5 text-[#d4af37]" />
-                  <span>{focusedFactory.foundationYear}</span>
-                </div>
-              </div>
+                  </span>
+                </span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#2e1910] border border-[#d4af37]/30 text-xs text-[#e5c158] font-semibold">
+                    <Calendar className="w-3.5 h-3.5 text-[#d4af37]" />
+                    <span>{focusedFactory.foundationYear}</span>
+                  </span>
+                  <span className="w-11 h-11 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-[#2e1910] border border-[#d4af37]/30 text-[#e5c158]">
+                    <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${isCardExpanded ? 'rotate-180' : ''}`} />
+                  </span>
+                </span>
+              </button>
 
-              {/* Description */}
-              <p className="text-xs text-[#d7c4b7] line-clamp-3 mb-3 leading-relaxed">
-                {focusedFactory.description}
-              </p>
+              {/* Expanded content: slogan, description, address, dots, dive CTA */}
+              <AnimatePresence initial={false}>
+                {isCardExpanded && (
+                  <motion.div
+                    key="card-details"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-4 sm:px-5 pb-4 sm:pb-5">
+                      <p className="text-[11px] text-[#e5c158] italic font-serif-luxury mb-2">
+                        "{focusedFactory.slogan}"
+                      </p>
 
-              {/* Bottom Actions & Location */}
-              <div className="flex items-center justify-between pt-2.5 border-t border-[#d4af37]/20">
-                <div className="text-[11px] text-[#bda393] flex items-center gap-1 max-w-[210px]">
-                  <MapPin className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
-                  <span className="truncate">{focusedFactory.headquarters}</span>
-                </div>
+                      {/* Description */}
+                      <p className="text-xs text-[#d7c4b7] line-clamp-3 mb-3 leading-relaxed">
+                        {focusedFactory.description}
+                      </p>
 
-                {/* Carousel dots inside card */}
-                <div className="flex items-center gap-1.5">
-                  {factories.map((f, idx) => (
-                    <button
-                      key={f.id}
-                      onClick={() => selectIslandByIndex(idx)}
-                      aria-label={`Ver fábrica ${f.name}`}
-                      className="min-h-[44px] min-w-[44px] -m-2 p-2 flex items-center justify-center rounded-full cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:outline-none"
-                    >
-                      <span
-                        className={`block transition-all duration-300 rounded-full ${
-                          idx === focusedIndex
-                            ? 'w-6 h-2 bg-gradient-to-r from-[#d4af37] to-[#e5c158] shadow-sm shadow-[#d4af37]'
-                            : 'w-2 h-2 bg-[#4a2e1f] hover:bg-[#8b5a2b]'
-                        }`}
-                      />
-                    </button>
-                  ))}
-                </div>
+                      {/* Bottom Actions & Location */}
+                      <div className="flex items-center justify-between pt-2.5 border-t border-[#d4af37]/20">
+                        <div className="text-[11px] text-[#bda393] flex items-center gap-1 max-w-[210px]">
+                          <MapPin className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
+                          <span className="truncate">{focusedFactory.headquarters}</span>
+                        </div>
 
-                {/* Primary Dive Button */}
-                <button
-                  onClick={() => handleInitiateDive(focusedFactory)}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
-                >
-                  <span>Entrar a la Isla</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-[#1a0f08]" />
-                </button>
-              </div>
+                        {/* Carousel dots inside card */}
+                        <div className="flex items-center gap-1.5">
+                          {factories.map((f, idx) => (
+                            <button
+                              key={f.id}
+                              onClick={() => selectIslandByIndex(idx)}
+                              aria-label={`Ver fábrica ${f.name}`}
+                              className="min-h-[44px] min-w-[44px] -m-2 p-2 flex items-center justify-center rounded-full cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:outline-none"
+                            >
+                              <span
+                                className={`block transition-all duration-300 rounded-full ${
+                                  idx === focusedIndex
+                                    ? 'w-6 h-2 bg-gradient-to-r from-[#d4af37] to-[#e5c158] shadow-sm shadow-[#d4af37]'
+                                    : 'w-2 h-2 bg-[#4a2e1f] hover:bg-[#8b5a2b]'
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Primary Dive Button */}
+                        <button
+                          onClick={() => handleInitiateDive(focusedFactory)}
+                          className="min-h-[44px] px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
+                        >
+                          <span>Entrar a la Isla</span>
+                          <ArrowRight className="w-3.5 h-3.5 text-[#1a0f08]" />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
             </div>
           </motion.div>
