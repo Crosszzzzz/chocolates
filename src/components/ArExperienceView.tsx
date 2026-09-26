@@ -1083,7 +1083,7 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({
               <div className="flex flex-col gap-2.5 mb-5">
                 <a
                   rel="ar"
-                  href={paths.usdzUnwrapped}
+                  href={`${paths.usdzUnwrapped}?v=2`}
                   className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f1c40f] to-[#b8860b] text-[#1a0f08] font-extrabold text-sm shadow-lg shadow-[#d4af37]/30 active:scale-[0.98] transition-all"
                 >
                   <Scan className="w-4 h-4" />
@@ -1091,7 +1091,7 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({
                 </a>
                 <a
                   rel="ar"
-                  href={paths.usdz}
+                  href={`${paths.usdz}?v=2`}
                   className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#2e1910] text-[#e5c158] font-bold text-sm border border-[#d4af37]/35 active:scale-[0.98] transition-all"
                 >
                   <span>Abrir tableta envuelta en RA</span>
