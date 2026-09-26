@@ -1,4 +1,4 @@
-import { ChocolateFactory } from '../types/chocolate';
+import { ChocolateFactory, CommerceProduct, ProductSpec } from '../types/chocolate';
 
 export const FACTORIES: ChocolateFactory[] = [
   {
@@ -283,3 +283,32 @@ export const FACTORIES: ChocolateFactory[] = [
     ]
   }
 ];
+
+// --- Commerce catalog (PR3, mvp-completo): DB-first with static fallback. ---
+// Prices/stock mirror supabase seed; chirimoya-blanco stock 0 exercises "Sin stock".
+const FALLBACK_PRICE: Record<string, { priceBOB: number; stock: number }> = {
+  'parati-70-silvestre': { priceBOB: 45, stock: 24 }, 'parati-singani-gran-reserva': { priceBOB: 52.5, stock: 18 }, 'parati-chirimoya-blanco': { priceBOB: 38, stock: 0 },
+  'sucre-colonial-canela': { priceBOB: 32, stock: 30 }, 'sucre-negro-sal-uyuni': { priceBOB: 48, stock: 15 }, 'sucre-nuez-macadamia': { priceBOB: 42, stock: 12 },
+  'taboada-submarino-puro': { priceBOB: 28, stock: 40 }, 'taboada-amargo-almendras': { priceBOB: 39.5, stock: 22 }, 'taboada-caja-realeza': { priceBOB: 85, stock: 10 },
+};
+export function toCommerce(p: ProductSpec): CommerceProduct {
+  const f = FALLBACK_PRICE[p.id] ?? { priceBOB: 0, stock: 0 };
+  return { ...p, sku: p.id, priceBOB: f.priceBOB, stock: f.stock };
+}
+export interface CatalogEntry { sku: string; nameEs: string; priceBOB: number; stock: number }
+export async function fetchCatalog(): Promise<{ entries: CatalogEntry[]; fromDb: boolean }> {
+  const fallback = FACTORIES.flatMap((f) => f.products.map((p) => {
+    const c = toCommerce(p);
+    return { sku: c.sku, nameEs: p.name, priceBOB: c.priceBOB, stock: c.stock } as CatalogEntry;
+  }));
+  try {
+    const res = await fetch('/api/products');
+    if (!res.ok) throw new Error('db-down');
+    const data = (await res.json()) as { products?: CatalogEntry[] };
+    if (!Array.isArray(data.products)) throw new Error('bad-shape');
+    return { entries: data.products, fromDb: true };
+  } catch {
+    console.error('No se pudo cargar el catálogo, usando datos locales');
+    return { entries: fallback, fromDb: false };
+  }
+}
