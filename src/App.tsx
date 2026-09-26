@@ -6,6 +6,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { CartDrawer, type CatalogMap } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
+import { AdminPanel } from './components/AdminPanel';
 import { FloatingIslandsView } from './components/FloatingIslandsView';
 import { HeritageCorridorView } from './components/HeritageCorridorView';
 import { RoyalChamberView } from './components/RoyalChamberView';
@@ -169,6 +170,8 @@ export default function App() {
       <CartDrawer open={cartOpen} catalog={catalogMap} onClose={() => setCartOpen(false)} onCheckout={() => { setCartOpen(false); setCheckoutOpen(true) }} />
       {/* PR4 checkout overlay (mock pay + wa.me, visual-no-op 3D) */}
       <CheckoutModal open={checkoutOpen} catalog={catalogMap} onClose={() => setCheckoutOpen(false)} />
+      {/* PR5 admin overlay (allow-list gated, visual-no-op 3D) */}
+      <AdminPanel catalog={catalogMap} />
 
     </div>
     </CartProvider>
