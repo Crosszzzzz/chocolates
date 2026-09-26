@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Compass, Volume2, VolumeX, Landmark, Sparkles, ChevronRight, HelpCircle, RotateCcw, LogIn, LogOut } from 'lucide-react';
+import { Compass, Volume2, VolumeX, Landmark, Sparkles, ChevronRight, HelpCircle, RotateCcw, LogIn, LogOut, ShoppingCart } from 'lucide-react';
 import { ChocolateFactory, RoutePhase } from '../types/chocolate';
 import { useAuth } from '../contexts/AuthContext';
+import { useCart } from '../contexts/CartContext';
 
 interface NavbarProps {
   currentFactory: ChocolateFactory | null;
@@ -16,6 +17,7 @@ interface NavbarProps {
   onGoToChamber?: () => void;
   onGoToCorridor?: () => void;
   onOpenGuide: () => void;
+  onOpenCart: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,9 +31,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   onReturnToArchipelago,
   onGoToChamber,
   onGoToCorridor,
-  onOpenGuide
+  onOpenGuide,
+  onOpenCart
 }) => {
   const { user, isLoading, errorEs, signInWithGoogle, signOut } = useAuth();
+  const { count } = useCart();
   return (
     <AnimatePresence>
       {visible && (
@@ -154,6 +158,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               {/* Social auth (PR2): Google session, Spanish strings, no 3D impact */}
+              <button
+                onClick={onOpenCart}
+                aria-label={count > 0 ? `Abrir carrito, ${count} productos` : 'Abrir carrito'}
+                title="Abrir carrito"
+                className="relative min-w-[44px] min-h-[32px] px-2.5 rounded-lg bg-[#2e1910] text-[#e5c158] hover:bg-[#3d2215] border border-[#d4af37]/30 transition-all cursor-pointer flex items-center justify-center"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                {count > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-[#d4af37] text-[#1a0f08] text-[10px] font-extrabold flex items-center justify-center">
+                    {count}
+                  </span>
+                )}
+              </button>
               {user ? (
                 <button
                   onClick={signOut}

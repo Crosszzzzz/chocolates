@@ -17,6 +17,8 @@ import {
   Info
 } from 'lucide-react';
 import { ProductSpec, ChocolateFactory } from '../types/chocolate';
+import { useCart } from '../contexts/CartContext';
+import { toCommerce } from '../data/factories';
 import { playFoilTearSound, playChocolateSnapSound } from '../utils/audio';
 
 interface UnwrappingModalViewProps {
@@ -45,6 +47,9 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   const [isFullyUnwrapped, setIsFullyUnwrapped] = useState<boolean>(false);
   const [isDraggingToTear, setIsDraggingToTear] = useState<boolean>(false);
   const [isOrbiting, setIsOrbiting] = useState<boolean>(false);
+  // PR3 cart overlay hook (overlay-only, never inside RAF/pointer handlers).
+  const { add, warning } = useCart();
+  const commerce = toCommerce(product);
 
   // Three.js instances
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -688,7 +693,17 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="pt-4 border-t border-[#d4af37]/20 flex items-center justify-between">
+        <div className="pt-4 border-t border-[#d4af37]/20 flex flex-col gap-2">
+          {/* PR3 overlay add-to-cart (no RAF/scene changes) */}
+          <button
+            onClick={() => add(commerce.sku, commerce.stock)}
+            disabled={commerce.stock <= 0}
+            title={commerce.stock <= 0 ? 'Sin stock' : `Añadir ${product.name} al carrito`}
+            className="w-full min-h-[44px] py-3 rounded-xl bg-[#2e1910] text-[#f1c40f] font-extrabold text-xs uppercase tracking-wider border border-[#d4af37]/40 hover:bg-[#3d2215] active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-center"
+          >
+            {commerce.stock <= 0 ? 'Sin stock' : `Añadir al carrito · Bs ${commerce.priceBOB.toFixed(2)}`}
+          </button>
+          {warning && <p role="alert" className="text-[11px] text-[#f0a6a6]">{warning}</p>}
           <button
             onClick={onBackToChamber}
             className="w-full py-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f1c40f] to-[#b8860b] text-[#1a0f08] font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-[#d4af37]/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer text-center"
