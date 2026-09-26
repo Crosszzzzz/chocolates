@@ -14,7 +14,7 @@ export const FACTORIES: ChocolateFactory[] = [
     brandColor: '#b01919',
     accentColor: '#f1c40f',
     islandPosition: [-6.8, 0.4, -1],
-    facade: '/factories/para-ti/facade.webp',
+    facade: '/factories/para-ti/facade.jpg',
     historyMilestones: [
       {
         year: '1989',
