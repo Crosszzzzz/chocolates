@@ -32,7 +32,7 @@ export const CheckoutModal: React.FC<Props> = ({ open, catalog, onClose }) => {
   return (
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Finalizar compra">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-[#1c100a] border border-[#d4af37]/30 rounded-t-2xl sm:rounded-2xl p-5 max-h-[85vh] overflow-y-auto">
+      <div className="relative w-full sm:max-w-md bg-[#1c100a] border border-[#d4af37]/30 rounded-t-2xl sm:rounded-2xl p-5 max-h-[85dvh] overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold text-[#fcf8f2]">Finalizar compra</h2>
           <button onClick={onClose} aria-label="Cerrar compra" className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/25 cursor-pointer"><X className="w-4 h-4" /></button>
@@ -54,7 +54,7 @@ export const CheckoutModal: React.FC<Props> = ({ open, catalog, onClose }) => {
               ))}
             </div>
             {delivery && (
-              <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Dirección en Sucre" aria-label="Dirección en Sucre"
+              <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Dirección en Sucre" aria-label="Dirección en Sucre" autoComplete="street-address"
                 className="min-h-[44px] rounded-xl bg-[#25130b] border border-[#d4af37]/20 px-3 text-sm text-[#fcf8f2] placeholder:text-[#8a7265]" />
             )}
             {errorEs !== null && <p role="alert" className="text-xs text-[#f0a6a6]">{errorEs}</p>}

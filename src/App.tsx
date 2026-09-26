@@ -107,7 +107,7 @@ export default function App() {
   return (
     <AuthProvider>
     <CartProvider>
-    <div className="relative w-screen h-screen overflow-hidden bg-[#120a06] text-[#f7efe5] font-sans select-none">
+    <div className="relative w-screen h-dvh overflow-hidden bg-[#120a06] text-[#f7efe5] font-sans select-none">
       {/* Dynamic Global Floating Navbar */}
       <Navbar
         currentFactory={currentFactory}

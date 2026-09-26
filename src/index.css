@@ -42,3 +42,10 @@
   -webkit-text-fill-color: transparent;
   animation: goldShimmer 6s ease-in-out infinite;
 }
+
+/* PR6 a11y: respect reduced motion in the active stylesheet (tokens.css stays orphan per constraint). */
+@media (prefers-reduced-motion: reduce) {
+  .gold-text-shimmer {
+    animation: none;
+  }
+}
