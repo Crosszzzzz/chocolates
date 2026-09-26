@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FACTORIES } from './data/factories';
 import { ChocolateFactory, ProductSpec, RoutePhase } from './types/chocolate';
 import { Navbar } from './components/Navbar';
+import { AuthProvider } from './contexts/AuthContext';
 import { FloatingIslandsView } from './components/FloatingIslandsView';
 import { HeritageCorridorView } from './components/HeritageCorridorView';
 import { RoyalChamberView } from './components/RoyalChamberView';
@@ -91,6 +92,7 @@ export default function App() {
   };
 
   return (
+    <AuthProvider>
     <div className="relative w-screen h-screen overflow-hidden bg-[#120a06] text-[#f7efe5] font-sans select-none">
       
       {/* Dynamic Global Floating Navbar */}
@@ -151,5 +153,6 @@ export default function App() {
       />
 
     </div>
+    </AuthProvider>
   );
 }
