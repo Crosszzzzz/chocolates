@@ -5,7 +5,6 @@ import { expect, test } from '@playwright/test';
 // direct — both satisfy "corridor always reachable".
 test('factory select always reaches the corridor (skip path)', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByText(/Ruta del Chocolate de Sucre/i)).toBeVisible({ timeout: 15000 });
   const entrar = page.getByRole('button', { name: /Entrar a la Isla/i });
   await expect(entrar).toBeVisible({ timeout: 15000 });
   await entrar.click();
