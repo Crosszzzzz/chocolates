@@ -10,7 +10,6 @@
 // Photos: /public placeholders (Storage deferred). See public/images/placeholder.svg.
 // Contract errors: 401/403/400/405/500 { error_es } (Spanish).
 // Rollback: delete the create/delete branches (or this file); shop + checkout keep working without admin.
-import { pickRoleFromProfileRow } from './me';
 
 export type AdminAction = 'update' | 'create' | 'delete';
 type Body = {
@@ -92,6 +91,22 @@ export function validateDeleteProduct(body: Body): { ok: true; sku: string } | {
 }
 
 // --- Server helpers ---
+
+// Inlined from api/me.ts (Vercel compiles each api/*.ts standalone without
+// bundling sibling imports, so a sibling import crashes live with ERR_MODULE_NOT_FOUND).
+type UserRole = 'turista' | 'empresa' | 'admin';
+const ROLE_VALUES: readonly string[] = ['turista', 'empresa', 'admin'];
+/** Pick the role from a profiles row (or missing row => 'turista'). Pure. */
+function pickRoleFromProfileRow(row: unknown): UserRole {
+  if (typeof row !== 'object' || row === null) return 'turista';
+  const role = (row as { role?: unknown }).role;
+  if (typeof role === 'string' && ROLE_VALUES.includes(role.trim().toLowerCase())) {
+    return role.trim().toLowerCase() as UserRole;
+  }
+  // Pre-002 fallback: boolean flag preserved by the sync trigger.
+  if ((row as { is_admin?: unknown }).is_admin === true) return 'admin';
+  return 'turista';
+}
 
 /** Resolve the api/me role for a userId (verified via Auth admin getUser; untrusted ids => turista). */
 async function fetchRoleByUserId(base: string, serviceKey: string, userId: string): Promise<string> {

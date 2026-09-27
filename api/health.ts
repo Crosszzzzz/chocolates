@@ -4,10 +4,9 @@
 //   200 { ok: true,  version, time, checks: { products: { ok: true, latencyMs } } }
 //   503 { ok: false, version, time, checks: { products: { ok: false, ... } } }
 // NOTE: a degraded products check is LOGGED but NOT sent to Sentry — every uptime
-// poll would otherwise spam alerts. Truly unexpected exceptions use reportApiError.
+// poll would otherwise spam alerts. Truly unexpected exceptions log a structured
+// error line (inlined, no sibling imports).
 // Rollback: delete this file + e2e/health.spec.ts; nothing else references it.
-
-import { reportApiError } from './_report';
 
 type VercelRequest = {
   method?: string;
@@ -74,7 +73,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     res.setHeader('Cache-Control', 'no-store');
     res.status(ok ? 200 : 503).json(body);
   } catch (err) {
-    reportApiError('health', err, undefined, req);
+    // M15 safety net (inlined: api/*.ts must stay standalone, no sibling imports).
+    // Structured log line only; monitoring must never turn a 503 into a crashed function.
+    try {
+      const message =
+        err instanceof Error
+          ? err.message !== ''
+            ? err.message
+            : String(err)
+          : typeof err === 'string'
+            ? err
+            : (() => {
+                try {
+                  return JSON.stringify(err);
+                } catch {
+                  return 'Unknown error';
+                }
+              })();
+      const stack = err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {};
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          service: 'api',
+          route: 'health',
+          method: req.method ?? 'unknown',
+          message,
+          ...stack,
+          time: new Date().toISOString(),
+        }),
+      );
+    } catch {
+      /* swallow: reporting failure is not a handler failure */
+    }
     res.status(503).json({ ok: false, version: APP_VERSION, time: new Date().toISOString(), checks: { products: { ok: false } } });
   }
 }

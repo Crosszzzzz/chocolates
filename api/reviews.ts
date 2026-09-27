@@ -13,7 +13,8 @@
 //   PATCH  { adminEmail|userId, reviewId, status }       -> 200 { id, status } | 400/403/404/500 { error_es }
 // Rollback: delete this file + 005 tables; shop + admin keep working without reviews.
 
-import { pickRoleFromProfileRow } from './me';
+// Inlined from api/me.ts (Vercel compiles each api/*.ts standalone without
+// bundling sibling imports, so a sibling import crashes live with ERR_MODULE_NOT_FOUND).
 
 // --- Types ---
 
@@ -226,6 +227,20 @@ export function isDuplicateReviewError(status: number, body: unknown): boolean {
 }
 
 // --- Server helpers ---
+
+type UserRole = 'turista' | 'empresa' | 'admin';
+const ROLE_VALUES: readonly string[] = ['turista', 'empresa', 'admin'];
+/** Pick the role from a profiles row (or missing row => 'turista'). Pure. */
+function pickRoleFromProfileRow(row: unknown): UserRole {
+  if (typeof row !== 'object' || row === null) return 'turista';
+  const role = (row as { role?: unknown }).role;
+  if (typeof role === 'string' && ROLE_VALUES.includes(role.trim().toLowerCase())) {
+    return role.trim().toLowerCase() as UserRole;
+  }
+  // Pre-002 fallback: boolean flag preserved by the sync trigger.
+  if ((row as { is_admin?: unknown }).is_admin === true) return 'admin';
+  return 'turista';
+}
 
 type Svc = { apikey: string; Authorization: string; Accept: string };
 
