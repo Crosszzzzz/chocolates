@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Crown, Sparkles, ArrowRight, Eye, ChevronLeft, Award } from 'lucide-react';
 import { ChocolateFactory, ProductSpec } from '../types/chocolate';
 import { playPedestalHum } from '../utils/audio';
+import { loadProductModel } from '../utils/glbProduct';
 import { useCart } from '../contexts/CartContext';
 import { toCommerce } from '../data/factories';
 
@@ -37,6 +38,11 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    // M3 GLB upgrade bookkeeping: pending loads are ignored once the effect
+    // is torn down, and successfully loaded models are disposed on cleanup.
+    let disposed = false;
+    const glbModels: THREE.Object3D[] = [];
 
     // 1. Scene Setup
     const scene = new THREE.Scene();
@@ -248,6 +254,10 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
         prodGroup.add(crest);
       }
 
+      // Snapshot of the procedural fallback meshes (hitbox excluded: it is
+      // added below and must stay active for hover/click raycasting).
+      const proceduralMeshes = [...prodGroup.children];
+
       // Hitbox for easy clicking
       const hitGeo = new THREE.CylinderGeometry(1.2, 1.2, 2.5, 12);
       const hitMat = new THREE.MeshBasicMaterial({ visible: false });
@@ -257,6 +267,21 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
 
       scene.add(prodGroup);
       productMeshesRef.current[prod.id] = prodGroup;
+
+      // M3: optional GLB upgrade. Attempts `/models/<sku>.glb` (sku = product
+      // id), normalizes it to the product's real height (heightCm, assuming
+      // 1 scene unit = 1 m — see glbProduct.ts) and swaps it in over the
+      // procedural mesh, keeping embedded PBR materials untouched. ANY load
+      // failure resolves to null and the procedural fallback stays visible,
+      // so missing assets can never break the scene.
+      void loadProductModel(prod.id, { heightCm: prod.heightCm }).then((model) => {
+        if (disposed || !model) return;
+        proceduralMeshes.forEach((mesh) => {
+          mesh.visible = false;
+        });
+        prodGroup.add(model);
+        glbModels.push(model);
+      });
     });
 
     // 7. Raycasting for hover & click
@@ -363,6 +388,7 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
     animate();
 
     return () => {
+      disposed = true;
       window.removeEventListener('resize', handleResize);
       container.removeEventListener('mousemove', handlePointerMove);
       container.removeEventListener('click', handlePointerDown);
@@ -372,6 +398,20 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
       if (renderer.domElement && container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
+      glbModels.forEach((obj) => {
+        obj.traverse((child) => {
+          const mesh = child as THREE.Mesh;
+          if (mesh.isMesh) {
+            mesh.geometry.dispose();
+            const material = mesh.material as THREE.Material | THREE.Material[];
+            if (Array.isArray(material)) {
+              material.forEach((m) => m.dispose());
+            } else {
+              material?.dispose();
+            }
+          }
+        });
+      });
       renderer.dispose();
     };
   }, [factory]);

@@ -5,6 +5,13 @@ export interface ProductSpec {
   cacaoPercentage: number;
   weight: string;
   dimensions: string;
+  /**
+   * Real-world standing height in cm (packaging-print estimate taken from
+   * the `dimensions` string, not a caliper measurement). Used to normalize
+   * an optional `/models/<sku>.glb` asset so its bounding-box height matches
+   * true scale. Bars use their longest edge; boxes resting flat use thickness.
+   */
+  heightCm: number;
   flavorProfile: string[];
   origin: string;
   description: string;
