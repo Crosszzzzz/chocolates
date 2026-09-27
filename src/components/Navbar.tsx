@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Compass, Volume2, VolumeX, Landmark, Sparkles, ChevronRight, HelpCircle, RotateCcw, LogIn, LogOut, ShoppingCart } from 'lucide-react';
+import { Building2, Compass, Volume2, VolumeX, Landmark, Sparkles, ChevronRight, HelpCircle, RotateCcw, LogIn, LogOut, ShieldCheck, ShoppingCart, User } from 'lucide-react';
 import { ChocolateFactory, RoutePhase } from '../types/chocolate';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import { ROLE_LABEL_ES } from '../lib/roles';
+import { EmailAuthForm } from './EmailAuthForm';
 
 interface NavbarProps {
   currentFactory: ChocolateFactory | null;
@@ -34,8 +36,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenGuide,
   onOpenCart
 }) => {
-  const { user, isLoading, errorEs, signInWithGoogle, signOut } = useAuth();
+  const { user, role, isAdmin, isEmpresa, isLoading, errorEs, signInWithGoogle, signOut } = useAuth();
   const { count } = useCart();
+  const [authOpen, setAuthOpen] = useState(false);
   return (
     <AnimatePresence>
       {visible && (
@@ -157,7 +160,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <HelpCircle className="w-4 h-4 text-[#e5c158]" />
               </button>
 
-              {/* Social auth (PR2): Google session, Spanish strings, no 3D impact */}
+              {/* Social + email auth (M9): Google session + correo, Spanish strings, no 3D impact */}
               <button
                 onClick={onOpenCart}
                 aria-label={count > 0 ? `Abrir carrito, ${count} productos` : 'Abrir carrito'}
@@ -172,24 +175,55 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </button>
               {user ? (
-                <button
-                  onClick={signOut}
-                  className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-[#2e1910] text-[#e5c158] hover:bg-[#3d2215] border border-[#d4af37]/30 transition-all cursor-pointer"
-                  title={user.email ?? 'Sesión iniciada'}
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline max-w-[10rem] truncate">Cerrar sesión</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {/* Role badge: turista / empresa / admin surfaces the profile flag */}
+                  <span
+                    title={user.email ?? ROLE_LABEL_ES[role ?? 'turista']}
+                    className="hidden sm:flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-1.5 rounded-lg bg-[#3a1d12] text-[#e5c158] border border-[#d4af37]/30 max-w-[10rem]"
+                  >
+                    {isAdmin ? <ShieldCheck className="w-3 h-3 shrink-0" /> : isEmpresa ? <Building2 className="w-3 h-3 shrink-0" /> : <User className="w-3 h-3 shrink-0" />}
+                    <span className="truncate">{ROLE_LABEL_ES[role ?? 'turista']}</span>
+                  </span>
+                  <button
+                    onClick={signOut}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-[#2e1910] text-[#e5c158] hover:bg-[#3d2215] border border-[#d4af37]/30 transition-all cursor-pointer"
+                    title={user.email ?? 'Sesión iniciada'}
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline max-w-[10rem] truncate">Cerrar sesión</span>
+                  </button>
+                </div>
               ) : (
-                <button
-                  onClick={signInWithGoogle}
-                  disabled={isLoading}
-                  className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-[#d4af37] text-[#1a0f08] font-bold hover:bg-[#e5c158] border border-[#d4af37] transition-all cursor-pointer disabled:opacity-60"
-                  title={errorEs ?? 'Iniciar sesión con Google'}
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{isLoading ? 'Cargando…' : 'Iniciar sesión'}</span>
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setAuthOpen((v) => !v)}
+                    aria-expanded={authOpen}
+                    aria-label="Iniciar sesión"
+                    disabled={isLoading}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-[#d4af37] text-[#1a0f08] font-bold hover:bg-[#e5c158] border border-[#d4af37] transition-all cursor-pointer disabled:opacity-60"
+                    title={errorEs ?? 'Iniciar sesión con Google o correo'}
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">{isLoading ? 'Cargando…' : 'Iniciar sesión'}</span>
+                  </button>
+                  {authOpen && (
+                    <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-[#1c100a]/95 border border-[#d4af37]/30 p-3 shadow-2xl shadow-black/70 backdrop-blur-xl" role="dialog" aria-label="Iniciar sesión">
+                      <button
+                        onClick={signInWithGoogle}
+                        className="w-full min-h-[44px] rounded-xl bg-[#fcf8f2] text-[#1a0f08] text-xs font-bold hover:bg-white transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        Continuar con Google
+                      </button>
+                      <div className="flex items-center gap-2 my-2.5" aria-hidden="true">
+                        <span className="h-px flex-1 bg-[#d4af37]/20" />
+                        <span className="text-[10px] uppercase tracking-wide text-[#8a7265]">o con correo</span>
+                        <span className="h-px flex-1 bg-[#d4af37]/20" />
+                      </div>
+                      <EmailAuthForm onDone={() => setAuthOpen(false)} />
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 

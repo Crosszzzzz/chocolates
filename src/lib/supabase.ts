@@ -48,3 +48,82 @@ export function parseAuthHash(href: string): AuthHashResult {
   if (!accessToken) return { kind: 'empty' };
   return { kind: 'tokens', accessToken, refreshToken: params.get('refresh_token') ?? '' };
 }
+
+// M9 email/password auth (GoTrue REST, no new backend). Google flow above untouched.
+export interface EmailSession {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  user: { id: string; email: string | null };
+}
+interface GoTrueSessionResponse {
+  access_token?: unknown;
+  refresh_token?: unknown;
+  expires_in?: unknown;
+  user?: { id?: unknown; email?: unknown } | null;
+}
+function requireEmailConfig(): { base: string; anon: string } {
+  const base = getSupabaseUrl();
+  const anon = getSupabaseAnonKey();
+  if (base === '' || anon === '') throw new Error('Configura Supabase para iniciar sesión');
+  return { base, anon };
+}
+export function validateEmailCredentials(email: string, password: string): { email: string; password: string } {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) throw new Error('Correo electrónico inválido');
+  if (password.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres');
+  return { email: cleanEmail, password };
+}
+/** Parse a GoTrue session payload; throws Spanish errors (pure, unit-tested via roles/apiMe tests). */
+export function parseGoTrueSession(data: unknown): EmailSession {
+  const body = (typeof data === 'object' && data !== null ? data : {}) as GoTrueSessionResponse;
+  const accessToken = typeof body.access_token === 'string' ? body.access_token : '';
+  // Signup with email confirmation returns a user but no session: ask to confirm inbox.
+  if (accessToken === '') {
+    const pendingUser = typeof body.user?.id === 'string' ? body.user.id : '';
+    if (pendingUser !== '') throw new Error('Revisa tu correo para confirmar tu cuenta');
+    throw new Error('No se pudo iniciar sesión con correo');
+  }
+  const id = typeof body.user?.id === 'string' ? body.user.id : '';
+  if (id === '') throw new Error('No se pudo iniciar sesión con correo');
+  const email = typeof body.user?.email === 'string' ? body.user.email : null;
+  return {
+    accessToken,
+    refreshToken: typeof body.refresh_token === 'string' ? body.refresh_token : '',
+    expiresIn: typeof body.expires_in === 'number' && Number.isFinite(body.expires_in) ? body.expires_in : 3600,
+    user: { id, email },
+  };
+}
+async function postGoTrue(path: string, payload: { email: string; password: string }): Promise<EmailSession> {
+  const { base, anon } = requireEmailConfig();
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { apikey: anon, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error('No se pudo iniciar sesión con correo');
+  }
+  const data: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg = typeof (data as { msg?: unknown } | null)?.msg === 'string'
+      ? ((data as { msg?: string }).msg as string)
+      : '';
+    if (/invalid login credentials/i.test(msg)) throw new Error('Correo o contraseña incorrectos');
+    if (/already registered|already exists|user already/i.test(msg)) throw new Error('Este correo ya está registrado, inicia sesión');
+    throw new Error('No se pudo iniciar sesión con correo');
+  }
+  return parseGoTrueSession(data);
+}
+/** POST /auth/v1/signup (GoTrue REST). */
+export function signUpWithEmailPassword(email: string, password: string): Promise<EmailSession> {
+  const creds = validateEmailCredentials(email, password);
+  return postGoTrue('/auth/v1/signup', creds);
+}
+/** POST /auth/v1/token?grant_type=password (GoTrue REST). */
+export function signInWithEmailPassword(email: string, password: string): Promise<EmailSession> {
+  const creds = validateEmailCredentials(email, password);
+  return postGoTrue('/auth/v1/token?grant_type=password', creds);
+}
