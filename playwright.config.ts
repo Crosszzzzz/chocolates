@@ -5,7 +5,9 @@ export default defineConfig({
   timeout: 60 * 1000,
   reporter: [['list']],
   use: {
-    baseURL: 'https://chocolates-zeta.vercel.app',
+    // PLAYWRIGHT_BASE_URL override enables local verification (dev/preview)
+    // without editing this file; default stays the live site for CI.
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'https://chocolates-zeta.vercel.app',
   },
   projects: [
     {
