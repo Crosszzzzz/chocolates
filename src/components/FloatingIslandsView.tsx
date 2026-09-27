@@ -9,9 +9,16 @@ import {
   Compass,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Info,
   Hand
 } from 'lucide-react';
 import { ChocolateFactory } from '../types/chocolate';
+import {
+  getIslandFacadeUrl,
+  isIslandFacadeLoaded,
+  preloadIslandFacade,
+} from '../utils/islandFacade';
 import {
   playIslandDiveChime,
   playPedestalHum,
@@ -24,6 +31,8 @@ interface FloatingIslandsViewProps {
   isDiving: boolean;
 }
 
+const HUD_COLLAPSED_STORAGE_KEY = 'floating-islands-hud-collapsed';
+
 export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   factories,
   onSelectFactory,
@@ -35,6 +44,30 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   const [focusedIndex, setFocusedIndex] = useState<number>(1);
   const focusedIndexRef = useRef<number>(1);
   focusedIndexRef.current = focusedIndex;
+
+  // Collapsible HUD card state (persisted; collapsed card becomes a small FAB)
+  const [isHudCollapsed, setIsHudCollapsed] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(HUD_COLLAPSED_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleHudCollapsed = useCallback(() => {
+    setIsHudCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(HUD_COLLAPSED_STORAGE_KEY, next ? '1' : '0');
+      } catch {
+        // Storage unavailable (private mode, etc.): collapse still works in-memory
+      }
+      return next;
+    });
+  }, []);
+
+  // Tracks which optional image facades finished preloading (procedural stays otherwise)
+  const [facadeReady, setFacadeReady] = useState<Record<string, boolean>>({});
 
   const [hoveredFactory, setHoveredFactory] = useState<ChocolateFactory | null>(null);
   const hoveredFactoryRef = useRef<ChocolateFactory | null>(null);
@@ -136,6 +169,10 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       } else if (e.key === 'ArrowLeft') {
         goToPrevIsland();
       } else if (e.key === 'Enter') {
+        // Let focused controls (e.g. the HUD collapse toggle) handle Enter
+        // natively so global dive doesn't double-fire; arrows still work everywhere.
+        const target = e.target as HTMLElement | null;
+        if (target?.closest?.('button, input, textarea, select, a[href]')) return;
         const current = factories[focusedIndexRef.current];
         if (current) {
           handleInitiateDive(current);
@@ -145,6 +182,22 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [factories, activeFactory, goToNextIsland, goToPrevIsland, handleInitiateDive]);
+
+  // Optional image facades: preload `/images/islands/<id>.jpg` per island.
+  // Missing files resolve false via onerror; the procedural render stays.
+  useEffect(() => {
+    let cancelled = false;
+    factories.forEach((factory) => {
+      preloadIslandFacade(factory.id).then((ok) => {
+        if (ok && !cancelled) {
+          setFacadeReady((prev) => (prev[factory.id] ? prev : { ...prev, [factory.id]: true }));
+        }
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [factories]);
 
   // Three.js Scene Setup & Animation Loop
   useEffect(() => {
@@ -255,7 +308,25 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       const topPlateau = new THREE.Mesh(topPlateauGeo, topPlateauMat);
       topPlateau.position.y = 0.05;
       topPlateau.receiveShadow = true;
+      topPlateau.userData.isFacadePlateau = true;
       group.add(topPlateau);
+
+      // Optional image-facade upgrade: if the JPG already preloaded, skin the
+      // plateau with it; on missing files / load error keep the procedural material.
+      if (isIslandFacadeLoaded(factory.id)) {
+        new THREE.TextureLoader().load(
+          getIslandFacadeUrl(factory.id),
+          (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            topPlateauMat.map = tex;
+            topPlateauMat.needsUpdate = true;
+          },
+          undefined,
+          () => {
+            // Missing image: keep procedural fallback untouched
+          }
+        );
+      }
 
       // Glowing Halo Ring under the island
       const ringGeo = new THREE.RingGeometry(2.4, 2.75, 36);
@@ -656,6 +727,34 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     };
   }, [factories, onSelectFactory, goToNextIsland, goToPrevIsland, handleInitiateDive, selectIslandByIndex]);
 
+  // When a facade image finishes preloading, skin the plateau in place.
+  // Runs again on factories change so scene rebuilds get re-skinned.
+  useEffect(() => {
+    const ids = Object.keys(facadeReady);
+    if (ids.length === 0) return;
+    const loader = new THREE.TextureLoader();
+    ids.forEach((id) => {
+      const group = islandGroupsRef.current[id];
+      const plateau = group?.children.find((child) => child.userData?.isFacadePlateau) as THREE.Mesh | undefined;
+      if (!plateau) return;
+      const mat = plateau.material as THREE.MeshStandardMaterial;
+      if (mat.userData?.facadeApplied) return;
+      loader.load(
+        getIslandFacadeUrl(id),
+        (tex) => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          mat.map = tex;
+          mat.needsUpdate = true;
+          mat.userData.facadeApplied = true;
+        },
+        undefined,
+        () => {
+          // Missing image: keep the procedural fallback untouched
+        }
+      );
+    });
+  }, [facadeReady, factories]);
+
   const focusedFactory = factories[focusedIndex] || factories[0];
 
   return (
@@ -731,9 +830,25 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         <ChevronRight className="w-6 h-6 group-hover:translate-x-0.5 transition-transform" />
       </button>
 
-      {/* Focused Island HUD Card (Always present and reactive) */}
+      {/* Focused Island HUD Card (collapsible; collapsed state persists) */}
       <AnimatePresence mode="wait">
         {focusedFactory && !activeFactory && (
+          isHudCollapsed ? (
+            <motion.button
+              key="hud-collapsed-fab"
+              type="button"
+              onClick={toggleHudCollapsed}
+              aria-expanded={false}
+              aria-label="Mostrar información de la isla"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.25 }}
+              className="absolute bottom-20 md:bottom-22 left-1/2 -translate-x-1/2 z-20 min-w-[44px] min-h-[44px] w-12 h-12 rounded-full bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 text-[#e5c158] shadow-2xl shadow-black/90 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+            >
+              <Info className="w-5 h-5" />
+            </motion.button>
+          ) : (
           <motion.div
             key={focusedFactory.id}
             initial={{ opacity: 0, y: 25, scale: 0.96 }}
@@ -763,9 +878,20 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                     "{focusedFactory.slogan}"
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#2e1910] border border-[#d4af37]/30 text-xs text-[#e5c158] font-semibold">
-                  <Calendar className="w-3.5 h-3.5 text-[#d4af37]" />
-                  <span>{focusedFactory.foundationYear}</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#2e1910] border border-[#d4af37]/30 text-xs text-[#e5c158] font-semibold">
+                    <Calendar className="w-3.5 h-3.5 text-[#d4af37]" />
+                    <span>{focusedFactory.foundationYear}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleHudCollapsed}
+                    aria-expanded={!isHudCollapsed}
+                    aria-label="Ocultar información de la isla"
+                    className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl bg-[#2e1910] border border-[#d4af37]/30 text-[#e5c158] hover:text-white hover:border-[#d4af37] flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <ChevronDown className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
 
@@ -809,7 +935,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
 
             </div>
           </motion.div>
-        )}
+          ))}
       </AnimatePresence>
 
       {/* Island Quick Selector Bar (Bottom for desktop) */}
