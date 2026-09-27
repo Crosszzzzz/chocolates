@@ -20,6 +20,13 @@ import { ProductSpec, ChocolateFactory } from '../types/chocolate';
 import { useCart } from '../contexts/CartContext';
 import { toCommerce } from '../data/factories';
 import { playFoilTearSound, playChocolateSnapSound } from '../utils/audio';
+import {
+  type WrapState,
+  nextWrapState,
+  pieceTransform,
+  loadWrapState,
+  saveWrapState,
+} from '../utils/wrapper';
 
 interface UnwrappingModalViewProps {
   product: ProductSpec;
@@ -37,6 +44,13 @@ interface WrapperPiece {
   opacity: number;
 }
 
+// M4: label for the state that `advanceWrapState` will transition to.
+const NEXT_LABEL: Record<WrapState, string> = {
+  peeking: 'Entreabrir',
+  unwrapped: 'Desenvolver',
+  wrapped: 'Envolver',
+};
+
 export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   product,
   factory,
@@ -50,6 +64,65 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   // PR3 cart overlay hook (overlay-only, never inside RAF/pointer handlers).
   const { add, warning } = useCart();
   const commerce = toCommerce(product);
+  const sku = commerce.sku;
+
+  // M4: 3-state wrap machine (wrapped → peeking → unwrapped → wrapped),
+  // persisted per sku so a future AR view can resume it.
+  const [wrapState, setWrapState] = useState<WrapState>(() => loadWrapState(sku) ?? 'wrapped');
+  const wrapStateRef = useRef<WrapState>(wrapState);
+  const setWrap = (s: WrapState) => {
+    wrapStateRef.current = s;
+    setWrapState(s);
+    saveWrapState(sku, s);
+  };
+
+  // Apply a wrap state's static visuals to existing pieces (no animation).
+  // wrapped/unwrapped match the existing rewrap/torn end-states exactly.
+  const applyWrapVisual = (state: WrapState) => {
+    const pieces = wrapperPiecesRef.current;
+    if (pieces.length === 0) return;
+    if (state === 'peeking') {
+      pieces.forEach((piece, idx) => {
+        const t = pieceTransform('peeking', idx);
+        piece.torn = false;
+        piece.opacity = t.opacity;
+        piece.mesh.visible = true;
+        piece.mesh.position.set(
+          piece.initialPos.x + Math.sign(piece.initialPos.x || (idx % 2 === 0 ? 1 : -1)) * t.displacement * 0.18,
+          piece.initialPos.y + t.displacement * 0.12,
+          piece.initialPos.z + t.displacement * 0.35
+        );
+        piece.mesh.rotation.set(
+          piece.initialRot.x + t.rotation * 0.25,
+          piece.initialRot.y + t.rotation * 0.2,
+          piece.initialRot.z + t.rotation * 0.15
+        );
+        (piece.mesh.material as THREE.MeshStandardMaterial).opacity = t.opacity;
+      });
+      setUnwrapProgress(0.5);
+      setIsFullyUnwrapped(false);
+    } else if (state === 'unwrapped') {
+      pieces.forEach((piece) => {
+        piece.torn = true;
+        piece.opacity = 0;
+        piece.mesh.visible = false;
+        (piece.mesh.material as THREE.MeshStandardMaterial).opacity = 0;
+      });
+      setUnwrapProgress(1);
+      setIsFullyUnwrapped(true);
+    } else {
+      pieces.forEach((piece) => {
+        piece.torn = false;
+        piece.opacity = 1;
+        piece.mesh.visible = true;
+        piece.mesh.position.copy(piece.initialPos);
+        piece.mesh.rotation.copy(piece.initialRot);
+        (piece.mesh.material as THREE.MeshStandardMaterial).opacity = 1;
+      });
+      setUnwrapProgress(0);
+      setIsFullyUnwrapped(false);
+    }
+  };
 
   // Three.js instances
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -138,6 +211,11 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    // M4: resume persisted wrap state for this sku (AR continuity).
+    const fresh = loadWrapState(toCommerce(product).sku) ?? 'wrapped';
+    wrapStateRef.current = fresh;
+    setWrapState(fresh);
 
     // 1. Scene Setup
     const scene = new THREE.Scene();
@@ -301,6 +379,11 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
 
     wrapperPiecesRef.current = pieces;
 
+    // M4: apply resumed non-wrapped state onto the freshly built pieces.
+    if (fresh !== 'wrapped') {
+      applyWrapVisual(fresh);
+    }
+
     // 6. Raycasting & Interaction Handlers
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -329,6 +412,10 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
 
       if (progress >= 1) {
         setIsFullyUnwrapped(true);
+        // M4: keep the persisted wrap state in sync with manual tearing.
+        wrapStateRef.current = 'unwrapped';
+        setWrapState('unwrapped');
+        saveWrapState(toCommerce(product).sku, 'unwrapped');
         playChocolateSnapSound();
         confetti({
           particleCount: 60,
@@ -496,6 +583,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
       }, idx * 60);
     });
 
+    setWrap('unwrapped');
     setTimeout(() => {
       setIsFullyUnwrapped(true);
       playChocolateSnapSound();
@@ -525,7 +613,26 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
 
     setUnwrapProgress(0);
     setIsFullyUnwrapped(false);
+    setWrap('wrapped');
     playFoilTearSound();
+  };
+
+  // M4: intermediate state — pieces half-displaced with partial opacity.
+  const applyPeeking = () => {
+    applyWrapVisual('peeking');
+    if (chocolateBarGroupRef.current) {
+      chocolateBarGroupRef.current.rotation.set(0, 0, 0);
+    }
+    setWrap('peeking');
+    playFoilTearSound();
+  };
+
+  // M4: cycle wrapped → peeking → unwrapped → wrapped.
+  const advanceWrapState = () => {
+    const next = nextWrapState(wrapStateRef.current);
+    if (next === 'peeking') applyPeeking();
+    else if (next === 'unwrapped') tearAll();
+    else rewrapPieces();
   };
 
   return (
@@ -553,6 +660,14 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
           {/* Interactive State Badge */}
           <div className="pointer-events-auto">
             {!isFullyUnwrapped ? (
+              wrapState === 'peeking' ? (
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1c100a]/90 border border-[#f1c40f]/50 text-xs text-[#f1c40f] backdrop-blur-md shadow-lg">
+                  <Layers className="w-3.5 h-3.5 animate-pulse text-[#f1c40f]" />
+                  <span className="font-semibold">
+                    Entreabierto · 50% — desliza para terminar de desenvolver
+                  </span>
+                </div>
+              ) : (
               <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1c100a]/90 border border-[#d4af37]/40 text-xs text-[#f1c40f] backdrop-blur-md shadow-lg">
                 <Scissors className="w-3.5 h-3.5 animate-pulse text-[#d4af37]" />
                 <span className="font-semibold">
@@ -561,6 +676,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
                     : `Desempaquetando: ${Math.round(unwrapProgress * 100)}%`}
                 </span>
               </div>
+              )
             ) : (
               <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1c100a]/90 border border-[#22c55e]/40 text-xs text-[#4ade80] backdrop-blur-md shadow-lg">
                 <Rotate3d className="w-3.5 h-3.5 animate-spin" />
@@ -590,6 +706,15 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
               <span>Volver a envolver</span>
             </button>
           )}
+
+          <button
+            onClick={advanceWrapState}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1c100a]/90 hover:bg-[#2b170e] text-xs font-bold text-[#f1c40f] border border-[#f1c40f]/30 shadow-xl transition-all cursor-pointer backdrop-blur-md"
+            title="Avanzar al siguiente estado del envoltorio (envuelto → entreabierto → desenvuelto)"
+          >
+            <Package className="w-3.5 h-3.5" />
+            <span>Siguiente: {NEXT_LABEL[nextWrapState(wrapState)]}</span>
+          </button>
 
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1c100a]/80 text-[11px] text-[#a08575] border border-[#d4af37]/15 backdrop-blur-sm">
             <span>Usa la rueda del ratón hacia atrás para re-envolver</span>
