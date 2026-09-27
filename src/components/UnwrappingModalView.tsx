@@ -32,6 +32,7 @@ interface UnwrappingModalViewProps {
   product: ProductSpec;
   factory: ChocolateFactory;
   onBackToChamber: () => void;
+  onOpenAr?: () => void;
 }
 
 interface WrapperPiece {
@@ -54,7 +55,8 @@ const NEXT_LABEL: Record<WrapState, string> = {
 export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   product,
   factory,
-  onBackToChamber
+  onBackToChamber,
+  onOpenAr
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [unwrapProgress, setUnwrapProgress] = useState<number>(0);
@@ -829,6 +831,15 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
             {commerce.stock <= 0 ? 'Sin stock' : `Añadir al carrito · Bs ${commerce.priceBOB.toFixed(2)}`}
           </button>
           {warning && <p role="alert" className="text-[11px] text-[#f0a6a6]">{warning}</p>}
+          {onOpenAr && (
+            <button
+              onClick={onOpenAr}
+              aria-label="Ver el producto en realidad aumentada"
+              className="w-full min-h-[44px] py-3 rounded-xl bg-[#2e1910] text-[#f1c40f] font-extrabold text-xs uppercase tracking-wider border border-[#d4af37]/40 hover:bg-[#3d2215] active:scale-[0.98] transition-all cursor-pointer text-center"
+            >
+              Ver en realidad aumentada
+            </button>
+          )}
           <button
             onClick={onBackToChamber}
             className="w-full py-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f1c40f] to-[#b8860b] text-[#1a0f08] font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-[#d4af37]/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer text-center"

@@ -49,7 +49,7 @@ export interface ChocolateFactory {
   products: ProductSpec[];
 }
 
-export type RoutePhase = 'archipelago' | 'diving' | 'corridor' | 'chamber' | 'unwrap';
+export type RoutePhase = 'archipelago' | 'diving' | 'corridor' | 'chamber' | 'unwrap' | 'ar';
 
 // --- Commerce foundation (PR1, mvp-completo) ---
 // Extends the static 3D catalog without changing existing ProductSpec behavior.

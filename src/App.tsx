@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { FACTORIES, fetchCatalog, type CatalogEntry } from './data/factories';
+import { FACTORIES, fetchCatalog, toCommerce, type CatalogEntry } from './data/factories';
 import { ChocolateFactory, ProductSpec, RoutePhase } from './types/chocolate';
 import { Navbar } from './components/Navbar';
 import { AuthProvider } from './contexts/AuthContext';
@@ -11,6 +11,7 @@ import { FloatingIslandsView } from './components/FloatingIslandsView';
 import { HeritageCorridorView } from './components/HeritageCorridorView';
 import { RoyalChamberView } from './components/RoyalChamberView';
 import { UnwrappingModalView } from './components/UnwrappingModalView';
+import { ArExperienceView } from './components/ArExperienceView';
 import { TourGuideModal } from './components/TourGuideModal';
 import { toggleAudio, isAudioEnabled, getAudioContext } from './utils/audio';
 
@@ -53,6 +54,8 @@ export default function App() {
       setNavbarVisible(true);
     } else if (phase === 'unwrap') {
       setNavbarVisible(true);
+    } else if (phase === 'ar') {
+      setNavbarVisible(true);
     }
   }, [phase]);
 
@@ -87,6 +90,17 @@ export default function App() {
   };
 
   const handleBackToChamber = () => {
+    setSelectedProduct(null);
+    setPhase('chamber');
+  };
+
+  const handleOpenAr = () => {
+    if (selectedProduct) {
+      setPhase('ar');
+    }
+  };
+
+  const handleBackToChamberFromAr = () => {
     setSelectedProduct(null);
     setPhase('chamber');
   };
@@ -156,6 +170,14 @@ export default function App() {
             product={selectedProduct}
             factory={currentFactory}
             onBackToChamber={handleBackToChamber}
+            onOpenAr={handleOpenAr}
+          />
+        )}
+
+        {phase === 'ar' && currentFactory && selectedProduct && (
+          <ArExperienceView
+            sku={toCommerce(selectedProduct).sku}
+            onBackToChamber={handleBackToChamberFromAr}
           />
         )}
       </main>

@@ -99,7 +99,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   onClick={onGoToChamber}
                   className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    phase === 'chamber' || phase === 'unwrap'
+                    phase === 'chamber' || phase === 'unwrap' || phase === 'ar'
                       ? 'bg-[#d4af37] text-[#1a0f08] font-bold shadow-md shadow-[#d4af37]/30'
                       : 'text-[#d7c4b7] hover:text-[#fff] hover:bg-[#2b1810]'
                   }`}
