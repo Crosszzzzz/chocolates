@@ -12,3 +12,11 @@ test('GET /api/products returns 9 products', async ({ page }) => {
   expect(Array.isArray(json.products)).toBeTruthy();
   expect(json.products).toHaveLength(9);
 });
+
+test('homepage loads without page errors (3D intact)', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  await page.goto('/');
+  await page.waitForTimeout(5000);
+  expect(errors).toEqual([]);
+});
