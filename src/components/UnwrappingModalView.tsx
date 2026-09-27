@@ -19,6 +19,7 @@ import {
 import { ProductSpec, ChocolateFactory } from '../types/chocolate';
 import { useCart } from '../contexts/CartContext';
 import { toCommerce } from '../data/factories';
+import { ProductReviews } from './ProductReviews';
 import { playFoilTearSound, playChocolateSnapSound } from '../utils/audio';
 import {
   type WrapState,
@@ -816,6 +817,9 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
             <span className="text-[#f1c40f] font-bold block mb-1">Maridaje Sugerido:</span>
             <span>{product.pairing}</span>
           </div>
+
+          {/* M14: ratings + approved reviews for the focused sku (commerce.sku === product.id). */}
+          <ProductReviews sku={sku} />
 
         </div>
 

@@ -3,7 +3,7 @@
 // Contract: 200 { orderId, totalBOB } | 400/409/500 { error_es }.
 // Rollback: delete this file; cart + catalog keep working without checkout.
 type Line = { sku: string; qty: number };
-type VercelReq = { method?: string; headers?: { origin?: string | string[] }; body?: { lines?: Line[]; fulfillment?: string; address?: string; clientTotalBOB?: number } };
+type VercelReq = { method?: string; headers?: { origin?: string | string[] }; body?: { lines?: Line[]; fulfillment?: string; address?: string; clientTotalBOB?: number; userId?: unknown; user_id?: unknown } };
 type VercelRes = { setHeader: (n: string, v: string) => void; status: (c: number) => VercelRes; json: (b: unknown) => void; end: (b?: string) => void };
 function env(n: string): string { const v = process.env[n]; return typeof v === 'string' ? v.trim() : '' }
 const ALLOWED_ORIGINS = ['https://chocolates-zeta.vercel.app', 'http://localhost:3000'];
@@ -87,6 +87,26 @@ export default async function handler(req: VercelReq, res: VercelRes): Promise<v
     if (row?.order_id == null || !Number.isFinite(total)) { res.status(500).json({ error_es: 'No se pudo procesar el pedido' }); return }
     if (typeof clientTotalBOB === 'number' && Math.abs(clientTotalBOB - (total as number)) > 0.01) {
       res.status(400).json({ error_es: 'Total no coincide, inténtalo de nuevo' }); return;
+    }
+    // M14: attach the buyer to the order best-effort (005 user_id column) so
+    // api/reviews.ts can verify past purchases. Verified via Auth admin getUser;
+    // unverified ids are ignored and a missing column (005 not applied yet)
+    // never breaks checkout.
+    const rawUserId = req.body?.userId ?? req.body?.user_id;
+    const buyerId = typeof rawUserId === 'string' ? rawUserId.trim() : '';
+    if (buyerId !== '') {
+      try {
+        const check = await fetch(`${url.replace(/\/+$/, '')}/auth/v1/admin/users/${encodeURIComponent(buyerId)}`, {
+          headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
+        });
+        if (check.ok) {
+          await fetch(`${url.replace(/\/+$/, '')}/rest/v1/orders?id=eq.${encodeURIComponent(String(row.order_id))}`, {
+            method: 'PATCH',
+            headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: buyerId }),
+          }).catch(() => null);
+        }
+      } catch { /* buyer attach is best-effort; the order itself succeeded */ }
     }
     res.status(200).json({ orderId: row.order_id, totalBOB: total });
   } catch { res.status(500).json({ error_es: 'No se pudo procesar el pedido' }) }

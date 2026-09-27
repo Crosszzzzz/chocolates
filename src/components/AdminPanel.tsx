@@ -15,6 +15,7 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 type DashboardKpis = { totalOrders: number; revenueBOB: number; activeProducts: number; outOfStock: number; lowStock: { sku: string; nameEs: string; stock: number }[] };
 type DashboardOrder = { id: string; total_bob: number; fulfillment: string; status: string; created_at: string; itemCount: number };
 type DashboardPayload = { kpis: DashboardKpis; recentOrders: DashboardOrder[]; topProducts: { sku: string; qty: number }[] };
+type QueueReview = { id: string; sku: string; userId: string; rating: number; comment: string; status: string; createdAt: string };
 function modalidadEs(v: string): string { return v === 'delivery-sucre' ? 'Delivery' : v === 'pickup' ? 'Recojo' : v }
 function estadoEs(v: string): string { return v === 'reserved' ? 'Reservado' : v === 'cancelled' ? 'Cancelado' : v }
 export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
@@ -27,6 +28,11 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
   const [stats, setStats] = useState<DashboardPayload | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
+  // M14 moderation queue (pending reviews from api/reviews.ts).
+  const [queue, setQueue] = useState<QueueReview[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [moderating, setModerating] = useState<string | null>(null);
   async function loadStats(): Promise<void> {
     const email = user?.email ?? '';
     const uid = user?.id ?? '';
@@ -40,7 +46,32 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
       setStats(data);
     } catch { setStatsError('No se pudo cargar el panel') } finally { setStatsLoading(false) }
   }
-  useEffect(() => { if (open) void loadStats(); }, [open]);
+  async function loadQueue(): Promise<void> {
+    const email = user?.email ?? '';
+    const uid = user?.id ?? '';
+    if (!isAdminEmail(email)) return;
+    setQueueLoading(true); setQueueError(null);
+    try {
+      const q = new URLSearchParams({ status: 'pending', adminEmail: email, userId: uid });
+      const res = await fetch(`/api/reviews?${q.toString()}`);
+      if (res.status === 503) { setQueue([]); return } // 005 not applied yet.
+      const data = (await res.json()) as { reviews?: QueueReview[]; error_es?: string };
+      if (!res.ok || !Array.isArray(data.reviews)) { setQueueError(data.error_es ?? 'No se pudieron cargar las reseñas'); return }
+      setQueue(data.reviews);
+    } catch { setQueueError('No se pudieron cargar las reseñas') } finally { setQueueLoading(false) }
+  }
+  async function moderate(reviewId: string, status: 'approved' | 'rejected'): Promise<void> {
+    setModerating(reviewId); setErrorEs(null);
+    try {
+      const res = await fetch('/api/reviews', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminEmail: user?.email, userId: user?.id, reviewId, status }) });
+      const data = (await res.json().catch(() => null)) as { error_es?: string } | null;
+      if (!res.ok) { setErrorEs(data?.error_es ?? 'No se pudo moderar la opinión'); return }
+      setQueue((q) => q.filter((r) => r.id !== reviewId));
+      setOkMsg(status === 'approved' ? 'Opinión aprobada.' : 'Opinión rechazada.');
+    } catch { setErrorEs('No se pudo moderar la opinión') } finally { setModerating(null) }
+  }
+  useEffect(() => { if (open) { void loadStats(); void loadQueue(); } }, [open]);
   if (user === null || !isAdminEmail(user.email)) return null;
   const skus = Object.keys(catalog);
   async function save(sku: string): Promise<void> {
@@ -147,6 +178,35 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
                 </ul>
               )}
             </>
+          )}
+        </div>
+        <div className="mb-3 rounded-xl bg-[#25130b] border border-[#d4af37]/20 p-3" aria-label="Reseñas pendientes">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-bold text-[#fcf8f2]">Reseñas {queue.length > 0 && <span className="text-[#e5c158]">({queue.length})</span>}</h3>
+            <button onClick={() => void loadQueue()} aria-label="Actualizar reseñas" className="min-h-[44px] px-3 rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/25 text-xs font-bold cursor-pointer">Actualizar</button>
+          </div>
+          {queueLoading && <p role="status" className="text-xs text-[#bda393] mb-2">Cargando reseñas…</p>}
+          {queueError !== null && <p role="alert" className="text-xs text-[#f0a6a6] mb-2">{queueError}</p>}
+          {!queueLoading && queueError === null && queue.length === 0 && (
+            <p className="text-xs text-[#bda393]">Sin reseñas pendientes.</p>
+          )}
+          {queue.length > 0 && (
+            <ul className="flex flex-col gap-2" aria-label="Lista de reseñas pendientes">
+              {queue.map((r) => (
+                <li key={r.id} className="p-2 rounded-xl bg-[#120a06] border border-[#d4af37]/15">
+                  <p className="text-[11px] text-[#bda393]">{r.sku} · {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
+                  {r.comment !== '' && <p className="text-xs text-[#fcf8f2] mt-1 leading-relaxed">{r.comment}</p>}
+                  <div className="flex gap-1.5 mt-2">
+                    <button onClick={() => void moderate(r.id, 'approved')} disabled={moderating === r.id} aria-label={`Aprobar reseña de ${r.sku}`} className="min-h-[44px] px-3 rounded-xl bg-[#d4af37] text-[#1a0f08] text-xs font-bold disabled:opacity-60 cursor-pointer">
+                      {moderating === r.id ? 'Guardando…' : 'Aprobar'}
+                    </button>
+                    <button onClick={() => void moderate(r.id, 'rejected')} disabled={moderating === r.id} aria-label={`Rechazar reseña de ${r.sku}`} className="min-h-[44px] px-3 rounded-xl bg-[#2b170e] text-[#f0a6a6] border border-[#f0a6a6]/30 text-xs font-bold disabled:opacity-60 cursor-pointer">
+                      Rechazar
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
         {errorEs !== null && <p role="alert" className="text-xs text-[#f0a6a6] mb-2">{errorEs}</p>}
