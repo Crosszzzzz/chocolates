@@ -16,4 +16,9 @@ describe('buildCheckoutBody', () => {
       expect(body).toMatchObject({ fulfillment: 'delivery-sucre', clientTotalBOB: 79 });
     }
   });
+
+  it('passes a tourist street through the body (server min-length rule, no city name required)', () => {
+    const body = buildCheckoutBody(lines, 'delivery-sucre', 'calle dalence', 79, null);
+    expect(body).toMatchObject({ fulfillment: 'delivery-sucre', address: 'calle dalence' });
+  });
 });

@@ -11,6 +11,11 @@ function isAllowedOrigin(origin: string): boolean {
   if (ALLOWED_ORIGINS.includes(origin)) return true;
   return /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.vercel\.app$/i.test(origin);
 }
+// Delivery zone = Sucre city, implied by the fulfillment mode itself;
+// the street field only needs a plausible street + number (>= 6 chars).
+export function isDeliveryAddressValid(addr: string): boolean {
+  return addr.trim().length >= 6;
+}
 function applyCors(req: VercelReq, res: VercelRes): void {
   const raw = req.headers?.origin;
   const origin = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
@@ -35,7 +40,7 @@ export default async function handler(req: VercelReq, res: VercelRes): Promise<v
   if (fulfillment !== 'pickup' && fulfillment !== 'delivery-sucre') { res.status(400).json({ error_es: 'Modalidad de entrega no válida (solo pickup o delivery-sucre)' }); return }
   const addr = typeof address === 'string' ? address.trim() : '';
   if (fulfillment === 'delivery-sucre' && addr === '') { res.status(400).json({ error_es: 'Dirección requerida para delivery en Sucre' }); return }
-  if (fulfillment === 'delivery-sucre' && !/sucre/i.test(addr)) { res.status(400).json({ error_es: 'Solo entregamos en Sucre' }); return }
+  if (fulfillment === 'delivery-sucre' && !isDeliveryAddressValid(addr)) { res.status(400).json({ error_es: 'Escribe tu calle y número para el delivery en Sucre' }); return }
   const url = env('SUPABASE_URL'); const key = env('SUPABASE_SERVICE_ROLE_KEY');
   if (url === '' || key === '') { res.status(500).json({ error_es: 'No se pudo procesar el pedido' }); return }
   // Pre-validate client total BEFORE reserving stock (tamper-guard ordering fix).

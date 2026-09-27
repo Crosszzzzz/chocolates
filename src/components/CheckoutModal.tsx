@@ -61,8 +61,11 @@ export const CheckoutModal: React.FC<Props> = ({ open, catalog, onClose }) => {
               <p className="text-xs text-[#bda393]">Retiro en tienda: {pickupAddress !== '' ? pickupAddress : 'Coordinamos el retiro por WhatsApp'}</p>
             )}
             {delivery && (
-              <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Dirección en Sucre" aria-label="Dirección en Sucre" autoComplete="street-address"
-                className="min-h-[44px] rounded-xl bg-[#25130b] border border-[#d4af37]/20 px-3 text-sm text-[#fcf8f2] placeholder:text-[#8a7265]" />
+              <>
+                <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, número y referencia" aria-label="Calle, número y referencia" autoComplete="street-address"
+                  className="min-h-[44px] rounded-xl bg-[#25130b] border border-[#d4af37]/20 px-3 text-sm text-[#fcf8f2] placeholder:text-[#8a7265]" />
+                <p className="text-xs text-[#bda393]">Delivery solo en Sucre — escribí tu calle</p>
+              </>
             )}
             {errorEs !== null && <p role="alert" className="text-xs text-[#f0a6a6]">{errorEs}</p>}
             <button onClick={() => void confirm()} disabled={phase === 'loading' || lines.length === 0} className="min-h-[44px] rounded-xl bg-[#d4af37] text-[#1a0f08] text-sm font-bold disabled:opacity-60 cursor-pointer">
