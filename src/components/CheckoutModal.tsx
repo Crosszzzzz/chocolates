@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
+import { buildCheckoutBody } from '../lib/checkout';
 import type { CatalogMap } from './CartDrawer';
 import type { FulfillmentKind } from '../types/chocolate';
 import { buildWaLink, formatBOB } from '../lib/whatsapp';
@@ -8,6 +10,7 @@ interface Props { open: boolean; catalog: CatalogMap; onClose: () => void }
 type Phase = 'form' | 'loading' | 'done';
 export const CheckoutModal: React.FC<Props> = ({ open, catalog, onClose }) => {
   const { lines, clear } = useCart();
+  const { user } = useAuth();
   const [fulfillment, setFulfillment] = useState<FulfillmentKind>('pickup');
   const [address, setAddress] = useState('');
   const [phase, setPhase] = useState<Phase>('form');
@@ -21,7 +24,7 @@ export const CheckoutModal: React.FC<Props> = ({ open, catalog, onClose }) => {
     setPhase('loading'); setErrorEs(null);
     try {
       const res = await fetch('/api/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lines, fulfillment, address: address.trim(), clientTotalBOB: total }) });
+        body: JSON.stringify(buildCheckoutBody(lines, fulfillment, address.trim(), total, user?.id)) });
       const data = (await res.json()) as { orderId?: string; totalBOB?: number; error_es?: string };
       if (!res.ok) { setErrorEs(data.error_es ?? 'No se pudo procesar el pedido'); setPhase('form'); return }
       setOrderId(data.orderId ?? ''); setOrderTotal(typeof data.totalBOB === 'number' ? data.totalBOB : total);
