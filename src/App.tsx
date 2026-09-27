@@ -14,8 +14,11 @@ import { RoyalChamberView } from './components/RoyalChamberView';
 import { UnwrappingModalView } from './components/UnwrappingModalView';
 import { ArExperienceView } from './components/ArExperienceView';
 import { TourGuideModal } from './components/TourGuideModal';
-import { toggleAudio, isAudioEnabled, getAudioContext } from './utils/audio';
+import { toggleAudio, isAudioEnabled, getAudioContext, playIslandDiveChime } from './utils/audio';
 import { initMonitoring } from './lib/monitoring';
+
+// Timed M2 dive: archipelago -> diving -> corridor (matches island camera travel).
+const DIVE_MS = 1200;
 
 // M15 observability: attach global error handlers once (no-op without VITE_SENTRY_DSN).
 initMonitoring();
@@ -48,6 +51,16 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+  // Pending M2 dive timer + the factory it carries to the corridor.
+  const diveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const divingFactoryId = useRef<string | null>(null);
+  function clearDiveTimer(): void {
+    if (diveTimer.current !== null) { clearTimeout(diveTimer.current); diveTimer.current = null }
+  }
+  // A pending dive must never fire after unmount.
+  useEffect(() => () => {
+    if (diveTimer.current !== null) clearTimeout(diveTimer.current);
+  }, []);
   useEffect(() => {
     let alive = true;
     void fetchCatalog().then(({ entries }) => { if (alive) setCatalog(entries) }); return () => { alive = false };
@@ -98,7 +111,35 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
   };
 
   const handleSelectFactory = (factory: ChocolateFactory) => {
+    // The islands view re-fires onSelectFactory after its camera travel for
+    // the same factory: let the pending dive finish instead of restarting it.
+    if (divingFactoryId.current === factory.id) return;
+    clearDiveTimer();
     setCurrentFactory(factory);
+    let reduced = false;
+    try {
+      reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    } catch { reduced = false }
+    if (reduced) {
+      divingFactoryId.current = null;
+      setPhase('corridor');
+      return;
+    }
+    // Chime runs in the click gesture (autoplay-safe); the timer then walks
+    // archipelago -> diving -> corridor. Skippable, corridor always reachable.
+    divingFactoryId.current = factory.id;
+    playIslandDiveChime();
+    setPhase('diving');
+    diveTimer.current = setTimeout(() => {
+      diveTimer.current = null;
+      divingFactoryId.current = null;
+      setPhase('corridor');
+    }, DIVE_MS);
+  };
+
+  const handleSkipDive = () => {
+    clearDiveTimer();
+    divingFactoryId.current = null;
     setPhase('corridor');
   };
 
@@ -128,6 +169,8 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
   };
 
   const handleReturnToArchipelago = () => {
+    clearDiveTimer();
+    divingFactoryId.current = null;
     setPhase('archipelago');
     setSelectedProduct(null);
     setCurrentFactory(null);
@@ -175,12 +218,29 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
 
       {/* Primary Experience Stages */}
       <main className="w-full h-full">
-        {phase === 'archipelago' && (
+        {(phase === 'archipelago' || phase === 'diving') && (
           <FloatingIslandsView
             factories={FACTORIES}
             onSelectFactory={handleSelectFactory}
             isDiving={phase === 'diving'}
           />
+        )}
+
+        {/* M2 dive overlay: timed transition with skip; navbar hides via phase */}
+        {phase === 'diving' && currentFactory && (
+          <div role="status" aria-live="polite" aria-label={`Transición hacia ${currentFactory.name}`}
+            className="absolute inset-0 z-50 bg-[#120a06] flex flex-col items-center justify-center px-4">
+            <h3 className="text-2xl sm:text-4xl font-bold text-[#fcf8f2] text-center">
+              Adentrándose en {currentFactory.name}
+            </h3>
+            <p className="text-sm text-[#e5c158] mt-2 italic text-center">
+              Abriendo las puertas del pasillo patrimonial…
+            </p>
+            <button onClick={handleSkipDive} aria-label="Omitir transición"
+              className="mt-6 min-h-[44px] min-w-[44px] px-6 rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/40 text-sm font-bold cursor-pointer">
+              Omitir
+            </button>
+          </div>
         )}
 
         {phase === 'corridor' && currentFactory && (
