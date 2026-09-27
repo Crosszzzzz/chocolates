@@ -143,6 +143,18 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
     setPhase('corridor');
   };
 
+  // Navbar factory shortcuts (Para Ti / Sucre / Taboada) jump straight to
+  // that factory's product room (Sala Real), bypassing the corridor dive.
+  // The islands view keeps the corridor flow; the corridor stays reachable
+  // via Ver Islas / Pasillo Histórico.
+  const handleShortcutFactory = (factory: ChocolateFactory) => {
+    clearDiveTimer();
+    divingFactoryId.current = null;
+    setSelectedProduct(null);
+    setCurrentFactory(factory);
+    setPhase('chamber');
+  };
+
   const handleEnterChamber = () => {
     setPhase('chamber');
   };
@@ -206,7 +218,7 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
         visible={navbarVisible}
         soundEnabled={soundEnabled}
         onToggleSound={handleToggleSound}
-        onSelectFactory={handleSelectFactory}
+        onSelectFactory={handleShortcutFactory}
         factories={FACTORIES}
         onReturnToArchipelago={handleReturnToArchipelago}
         onGoToChamber={handleEnterChamber}
