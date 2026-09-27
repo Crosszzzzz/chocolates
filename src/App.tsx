@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { FACTORIES, fetchCatalog, toCommerce, type CatalogEntry } from './data/factories';
 import { ChocolateFactory, ProductSpec, RoutePhase } from './types/chocolate';
 import { Navbar } from './components/Navbar';
-import { AuthProvider } from './contexts/AuthContext';
-import { CartProvider } from './contexts/CartContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { CartProvider, useCart } from './contexts/CartContext';
 import { CartDrawer, type CatalogMap } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { AdminPanel } from './components/AdminPanel';
@@ -16,8 +16,25 @@ import { ArExperienceView } from './components/ArExperienceView';
 import { TourGuideModal } from './components/TourGuideModal';
 import { toggleAudio, isAudioEnabled, getAudioContext } from './utils/audio';
 
-export default function App() {
-  const [currentFactory, setCurrentFactory] = useState<ChocolateFactory | null>(null);
+// M11: binds the server cart to the logged-in user (guest flow untouched).
+function CartServerBridge(): null {
+  const { user } = useAuth();
+  const { loadFromServer, unlinkServer } = useCart();
+  const prevId = useRef<string | null>(null);
+  useEffect(() => {
+    const id = user?.id ?? null;
+    if (id !== null && id !== prevId.current) {
+      prevId.current = id;
+      void loadFromServer(id);
+    } else if (id === null && prevId.current !== null) {
+      prevId.current = null;
+      unlinkServer();
+    }
+  }, [user, loadFromServer, unlinkServer]);
+  return null;
+}
+
+export default function App() {  const [currentFactory, setCurrentFactory] = useState<ChocolateFactory | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductSpec | null>(null);
   const [phase, setPhase] = useState<RoutePhase>('archipelago');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -131,6 +148,7 @@ export default function App() {
   return (
     <AuthProvider>
     <CartProvider>
+    <CartServerBridge />
     <div className="relative w-screen h-dvh overflow-hidden bg-[#120a06] text-[#f7efe5] font-sans select-none">
       {/* M6 ambient background videos (renders nothing when no /videos/*.mp4 exist) */}
       <AmbientVideo />
