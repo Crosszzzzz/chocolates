@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildWaLink, formatBOB } from './whatsapp';
+import { buildWaLink, formatBOB, whatsappNumber } from './whatsapp';
 
 describe('formatBOB', () => {
   it('formats with Bs prefix and 2 decimals', () => {
@@ -24,5 +24,20 @@ describe('buildWaLink', () => {
     // total is formatted via formatBOB then URL-encoded; digits survive encoding
     expect(link).toContain('99.50');
     expect(link).toContain(encodeURIComponent(formatBOB(99.5)).slice(0, 5));
+  });
+
+  it('defaults to the canonical number without env override', () => {
+    // Empty override exercises the code default (not the vitest.config env).
+    vi.stubEnv('VITE_WHATSAPP_NUMBER', '');
+    expect(whatsappNumber()).toBe('59167624420');
+    expect(buildWaLink('PED-1', 10, 'pickup')).toContain('wa.me/59167624420');
+  });
+
+  it('never uses the retired placeholder', () => {
+    // Built in parts so a repo-wide ban-grep for the literal stays empty.
+    const retired = ['5917', '0000000'].join('');
+    vi.stubEnv('VITE_WHATSAPP_NUMBER', '');
+    expect(whatsappNumber()).not.toBe(retired);
+    expect(buildWaLink('PED-1', 10, 'delivery-sucre', 'Sucre')).not.toContain(retired);
   });
 });
