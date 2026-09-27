@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { CatalogMap } from './CartDrawer';
@@ -12,6 +12,11 @@ function adminList(): string[] {
 export function isAdminEmail(email: string | null | undefined): boolean {
   return typeof email === 'string' && adminList().includes(email.trim().toLowerCase());
 }
+type DashboardKpis = { totalOrders: number; revenueBOB: number; activeProducts: number; outOfStock: number; lowStock: { sku: string; nameEs: string; stock: number }[] };
+type DashboardOrder = { id: string; total_bob: number; fulfillment: string; status: string; created_at: string; itemCount: number };
+type DashboardPayload = { kpis: DashboardKpis; recentOrders: DashboardOrder[]; topProducts: { sku: string; qty: number }[] };
+function modalidadEs(v: string): string { return v === 'delivery-sucre' ? 'Delivery' : v === 'pickup' ? 'Recojo' : v }
+function estadoEs(v: string): string { return v === 'reserved' ? 'Reservado' : v === 'cancelled' ? 'Cancelado' : v }
 export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
@@ -19,6 +24,23 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
   const [errorEs, setErrorEs] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [stats, setStats] = useState<DashboardPayload | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  async function loadStats(): Promise<void> {
+    const email = user?.email ?? '';
+    const uid = user?.id ?? '';
+    if (!isAdminEmail(email)) return;
+    setStatsLoading(true); setStatsError(null);
+    try {
+      const q = new URLSearchParams({ adminEmail: email, userId: uid });
+      const res = await fetch(`/api/admin-stats?${q.toString()}`);
+      const data = (await res.json()) as DashboardPayload & { error_es?: string };
+      if (!res.ok) { setStatsError(data.error_es ?? 'No se pudo cargar el panel'); return }
+      setStats(data);
+    } catch { setStatsError('No se pudo cargar el panel') } finally { setStatsLoading(false) }
+  }
+  useEffect(() => { if (open) void loadStats(); }, [open]);
   if (user === null || !isAdminEmail(user.email)) return null;
   const skus = Object.keys(catalog);
   async function save(sku: string): Promise<void> {
@@ -54,6 +76,79 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
           <button onClick={() => setOpen(false)} aria-label="Cerrar administración" className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/25 cursor-pointer"><X className="w-4 h-4" /></button>
         </div>
         <p className="text-xs text-[#bda393] mb-3">Precios en BOB y stock. Solo delivery en Sucre (validado en compra).</p>
+        <div className="mb-3 rounded-xl bg-[#25130b] border border-[#d4af37]/20 p-3" aria-label="Resumen de ventas">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-bold text-[#fcf8f2]">Resumen</h3>
+            <button onClick={() => void loadStats()} aria-label="Actualizar panel" className="min-h-[44px] px-3 rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/25 text-xs font-bold cursor-pointer">Actualizar</button>
+          </div>
+          {statsLoading && <p role="status" className="text-xs text-[#bda393] mb-2">Cargando panel…</p>}
+          {statsError !== null && <p role="alert" className="text-xs text-[#f0a6a6] mb-2">{statsError}</p>}
+          {stats !== null && (
+            <>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="p-2 rounded-xl bg-[#120a06] border border-[#d4af37]/15">
+                  <p className="text-[11px] text-[#bda393]">Pedidos</p>
+                  <p className="text-base font-extrabold text-[#fcf8f2]" aria-label={`${stats.kpis.totalOrders} pedidos`}>{stats.kpis.totalOrders}</p>
+                </div>
+                <div className="p-2 rounded-xl bg-[#120a06] border border-[#d4af37]/15">
+                  <p className="text-[11px] text-[#bda393]">Ingresos Bs</p>
+                  <p className="text-base font-extrabold text-[#f1c40f]" aria-label={`Ingresos ${stats.kpis.revenueBOB} bolivianos`}>Bs {stats.kpis.revenueBOB.toFixed(2)}</p>
+                </div>
+                <div className="p-2 rounded-xl bg-[#120a06] border border-[#d4af37]/15">
+                  <p className="text-[11px] text-[#bda393]">Productos activos</p>
+                  <p className="text-base font-extrabold text-[#fcf8f2]">{stats.kpis.activeProducts}</p>
+                </div>
+                <div className="p-2 rounded-xl bg-[#120a06] border border-[#d4af37]/15">
+                  <p className="text-[11px] text-[#bda393]">Sin stock</p>
+                  <p className="text-base font-extrabold text-[#f0a6a6]">{stats.kpis.outOfStock}</p>
+                </div>
+              </div>
+              <h4 className="text-xs font-bold text-[#fcf8f2] mb-1">Pedidos recientes</h4>
+              {stats.recentOrders.length === 0 ? (
+                <p className="text-xs text-[#bda393] mb-2">Sin pedidos todavía.</p>
+              ) : (
+                <div className="overflow-x-auto mb-2">
+                  <table className="w-full text-[11px] text-[#fcf8f2]">
+                    <thead>
+                      <tr className="text-left text-[#bda393]">
+                        <th className="py-1 pr-2 font-bold">Pedido</th>
+                        <th className="py-1 pr-2 font-bold">Total</th>
+                        <th className="py-1 pr-2 font-bold">Artículos</th>
+                        <th className="py-1 pr-2 font-bold">Modalidad</th>
+                        <th className="py-1 pr-2 font-bold">Estado</th>
+                        <th className="py-1 font-bold">Fecha</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.recentOrders.map((o) => (
+                        <tr key={o.id} className="border-t border-[#d4af37]/10">
+                          <td className="py-1 pr-2" title={o.id}>{o.id.slice(0, 8)}</td>
+                          <td className="py-1 pr-2">Bs {Number(o.total_bob).toFixed(2)}</td>
+                          <td className="py-1 pr-2">{o.itemCount}</td>
+                          <td className="py-1 pr-2">{modalidadEs(o.fulfillment)}</td>
+                          <td className="py-1 pr-2">{estadoEs(o.status)}</td>
+                          <td className="py-1">{o.created_at !== '' ? new Date(o.created_at).toLocaleDateString('es-BO') : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <h4 className="text-xs font-bold text-[#fcf8f2] mb-1">Alertas de stock</h4>
+              {stats.kpis.lowStock.length === 0 ? (
+                <p className="text-xs text-[#bda393]">Stock sin alertas.</p>
+              ) : (
+                <ul className="flex flex-col gap-1" aria-label="Alertas de stock bajo">
+                  {stats.kpis.lowStock.map((p) => (
+                    <li key={p.sku} className="text-[11px] text-[#e8c97a]">
+                      {p.nameEs} — {p.stock <= 0 ? 'sin stock' : `quedan ${p.stock}`}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
         {errorEs !== null && <p role="alert" className="text-xs text-[#f0a6a6] mb-2">{errorEs}</p>}
         {okMsg !== null && <p role="status" className="text-xs text-[#a8e6a3] mb-2">{okMsg}</p>}
         <ul className="flex flex-col gap-2">
