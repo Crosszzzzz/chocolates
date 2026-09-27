@@ -9,7 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  Info
+  ChevronUp
 } from 'lucide-react';
 import { ChocolateFactory } from '../types/chocolate';
 import {
@@ -788,20 +788,35 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       <AnimatePresence mode="wait">
         {focusedFactory && !activeFactory && (
           isHudCollapsed ? (
-            <motion.button
-              key="hud-collapsed-fab"
-              type="button"
-              onClick={toggleHudCollapsed}
-              aria-expanded={false}
-              aria-label="Mostrar información de la isla"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.25 }}
-              className="absolute bottom-20 md:bottom-22 left-1/2 -translate-x-1/2 z-20 min-w-[44px] min-h-[44px] w-12 h-12 rounded-full bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 text-[#e5c158] shadow-2xl shadow-black/90 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+            <motion.div
+              key={`${focusedFactory.id}-collapsed`}
+              initial={{ opacity: 0, y: 25, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 15, scale: 0.96 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute bottom-20 md:bottom-22 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
             >
-              <Info className="w-5 h-5" />
-            </motion.button>
+              <div className="bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl px-4 py-2 flex items-center justify-between gap-3 shadow-2xl shadow-black/90">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    className="w-2.5 h-2.5 shrink-0 rounded-full ring-2 ring-[#d4af37]/30"
+                    style={{ backgroundColor: focusedFactory.accentColor }}
+                  />
+                  <h3 className="truncate text-base sm:text-lg font-bold text-[#fcf8f2] font-serif-luxury">
+                    {focusedFactory.name}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleHudCollapsed}
+                  aria-expanded={false}
+                  aria-label="Mostrar información de la isla"
+                  className="min-w-[44px] min-h-[44px] w-11 h-11 shrink-0 rounded-xl bg-[#2e1910] border border-[#d4af37]/30 text-[#e5c158] hover:text-white hover:border-[#d4af37] flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <ChevronUp className="w-5 h-5" />
+                </button>
+              </div>
+            </motion.div>
           ) : (
           <motion.div
             key={focusedFactory.id}
