@@ -38,6 +38,38 @@ export default async function handler(req: VercelReq, res: VercelRes): Promise<v
   if (fulfillment === 'delivery-sucre' && !/sucre/i.test(addr)) { res.status(400).json({ error_es: 'Solo entregamos en Sucre' }); return }
   const url = env('SUPABASE_URL'); const key = env('SUPABASE_SERVICE_ROLE_KEY');
   if (url === '' || key === '') { res.status(500).json({ error_es: 'No se pudo procesar el pedido' }); return }
+  // Pre-validate client total BEFORE reserving stock (tamper-guard ordering fix).
+  // RPC recomputes total server-side, but calling it first would reserve stock
+  // even when the client total was tampered. Fetch prices, compare, then RPC.
+  // Post-RPC check below stays as defense-in-depth for price races.
+  if (typeof clientTotalBOB === 'number' && Number.isFinite(clientTotalBOB)) {
+    try {
+      const skus = [...new Set(lines.map((l) => l.sku.trim()))];
+      const inList = skus.map((s) => `"${s.replace(/"/g, '')}"`).join(',');
+      const priceRes = await fetch(`${url.replace(/\/+$/, '')}/rest/v1/products?select=sku,price_bob,is_active&sku=in.(${encodeURIComponent(inList)})`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
+      });
+      if (priceRes.ok) {
+        const rows = (await priceRes.json().catch(() => null)) as { sku?: string; price_bob?: number | string; is_active?: boolean }[] | null;
+        if (Array.isArray(rows)) {
+          const priceBySku = new Map<string, number>();
+          for (const r of rows) {
+            if (typeof r?.sku !== 'string' || r?.is_active === false) continue;
+            const p = typeof r?.price_bob === 'string' ? Number(r.price_bob) : r?.price_bob;
+            if (typeof p === 'number' && Number.isFinite(p)) priceBySku.set(r.sku, p);
+          }
+          let expected: number | null = null;
+          if (skus.every((s) => priceBySku.has(s))) {
+            expected = 0;
+            for (const l of lines) expected += (priceBySku.get(l.sku.trim()) as number) * l.qty;
+          }
+          if (expected !== null && Math.abs(clientTotalBOB - expected) > 0.01) {
+            res.status(400).json({ error_es: 'Total no coincide, inténtalo de nuevo' }); return;
+          }
+        }
+      }
+    } catch { /* price pre-check is best-effort; RPC remains authoritative */ }
+  }
   try {
     const rpc = await fetch(`${url.replace(/\/+$/, '')}/rest/v1/rpc/reserve_order`, {
       method: 'POST',
