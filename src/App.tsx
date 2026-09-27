@@ -8,6 +8,7 @@ import { CartDrawer, type CatalogMap } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { AdminPanel } from './components/AdminPanel';
 import { FloatingIslandsView } from './components/FloatingIslandsView';
+import { AmbientVideo } from './components/AmbientVideo';
 import { HeritageCorridorView } from './components/HeritageCorridorView';
 import { RoyalChamberView } from './components/RoyalChamberView';
 import { UnwrappingModalView } from './components/UnwrappingModalView';
@@ -122,6 +123,8 @@ export default function App() {
     <AuthProvider>
     <CartProvider>
     <div className="relative w-screen h-dvh overflow-hidden bg-[#120a06] text-[#f7efe5] font-sans select-none">
+      {/* M6 ambient background videos (renders nothing when no /videos/*.mp4 exist) */}
+      <AmbientVideo />
       {/* Dynamic Global Floating Navbar */}
       <Navbar
         currentFactory={currentFactory}

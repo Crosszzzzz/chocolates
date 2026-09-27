@@ -861,7 +861,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
               
               {/* Card Header */}
               <div className="flex items-start justify-between gap-3 mb-2">
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span
                       className="w-2.5 h-2.5 rounded-full ring-2 ring-[#d4af37]/30"
@@ -878,7 +878,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                     "{focusedFactory.slogan}"
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1.5">
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#2e1910] border border-[#d4af37]/30 text-xs text-[#e5c158] font-semibold">
                     <Calendar className="w-3.5 h-3.5 text-[#d4af37]" />
                     <span>{focusedFactory.foundationYear}</span>
@@ -901,8 +901,8 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
               </p>
 
               {/* Bottom Actions & Location */}
-              <div className="flex items-center justify-between pt-2.5 border-t border-[#d4af37]/20">
-                <div className="text-[11px] text-[#bda393] flex items-center gap-1 max-w-[210px]">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-2.5 border-t border-[#d4af37]/20">
+                <div className="text-[11px] text-[#bda393] flex min-w-0 flex-1 items-center gap-1 max-w-[210px]">
                   <MapPin className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
                   <span className="truncate">{focusedFactory.headquarters}</span>
                 </div>
@@ -926,7 +926,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                 {/* Primary Dive Button */}
                 <button
                   onClick={() => handleInitiateDive(focusedFactory)}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex shrink-0 items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
                 >
                   <span>Entrar a la Isla</span>
                   <ArrowRight className="w-3.5 h-3.5 text-[#1a0f08]" />

@@ -46,10 +46,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
           className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-8 py-3.5 pointer-events-none"
         >
-          <div className="max-w-7xl mx-auto flex items-center justify-between pointer-events-auto backdrop-blur-xl bg-[#1c100a]/85 border border-[#d4af37]/25 rounded-2xl px-4 sm:px-6 py-2.5 shadow-2xl shadow-black/70">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 pointer-events-auto backdrop-blur-xl bg-[#1c100a]/85 border border-[#d4af37]/25 rounded-2xl px-4 sm:px-6 py-2.5 shadow-2xl shadow-black/70">
             
             {/* Brand / Logo */}
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <button
                 onClick={onReturnToArchipelago}
                 className="flex items-center gap-2.5 group text-left cursor-pointer focus:outline-none"
@@ -65,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <span className="text-xs font-semibold uppercase tracking-wider text-[#d4af37]">Sucre, Bolivia</span>
                     <span className="text-[10px] px-1.5 py-0.2 bg-[#d4af37]/15 text-[#e5c158] rounded border border-[#d4af37]/30">3D</span>
                   </div>
-                  <h1 className="text-sm sm:text-base font-bold text-[#fcf8f2] tracking-tight font-serif-luxury leading-tight">
+                  <h1 className="text-sm sm:text-base font-bold text-[#fcf8f2] tracking-tight font-serif-luxury leading-tight truncate">
                     Ruta del Chocolate
                   </h1>
                 </div>
@@ -110,7 +110,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
 
             {/* Right Controls: Factory Selector / Audio / Guide / Reset */}
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               {/* Factory Dropdown/Quick buttons */}
               {phase === 'archipelago' ? (
                 <div className="hidden sm:flex items-center gap-1.5">
