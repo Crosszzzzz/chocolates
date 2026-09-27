@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { ROLE_LABEL_ES } from '../lib/roles';
 import { EmailAuthForm } from './EmailAuthForm';
+import { SearchBox } from './SearchBox';
 
 interface NavbarProps {
   currentFactory: ChocolateFactory | null;
@@ -20,6 +21,7 @@ interface NavbarProps {
   onGoToCorridor?: () => void;
   onOpenGuide: () => void;
   onOpenCart: () => void;
+  onSearchPick?: (sku: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -34,7 +36,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onGoToChamber,
   onGoToCorridor,
   onOpenGuide,
-  onOpenCart
+  onOpenCart,
+  onSearchPick
 }) => {
   const { user, role, isAdmin, isEmpresa, isLoading, errorEs, signInWithGoogle, signOut } = useAuth();
   const { count } = useCart();
@@ -85,6 +88,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
             </div>
+
+            {/* M10 catalog search (live /api/search, local fallback) */}
+            {onSearchPick && (
+              <div className="hidden md:block flex-1 max-w-xs">
+                <SearchBox onPick={(entry) => onSearchPick(entry.sku)} />
+              </div>
+            )}
 
             {/* Middle Nav: Quick Navigation between stages when inside a factory */}
             {currentFactory && phase !== 'archipelago' && phase !== 'diving' && (

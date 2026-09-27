@@ -119,6 +119,15 @@ export default function App() {
     }
   };
 
+  // M10 search: jump to the picked product's factory chamber (sku == product id).
+  const handleSearchPick = (sku: string) => {
+    const factory = FACTORIES.find((f) => f.products.some((p) => p.id === sku));
+    if (!factory) return;
+    setSelectedProduct(null);
+    setCurrentFactory(factory);
+    setPhase('chamber');
+  };
+
   return (
     <AuthProvider>
     <CartProvider>
@@ -139,6 +148,7 @@ export default function App() {
         onGoToCorridor={handleGoToCorridor}
         onOpenGuide={() => setIsGuideOpen(true)}
         onOpenCart={() => setCartOpen(true)}
+        onSearchPick={handleSearchPick}
       />
 
       {/* Primary Experience Stages */}
