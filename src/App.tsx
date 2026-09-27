@@ -15,6 +15,10 @@ import { UnwrappingModalView } from './components/UnwrappingModalView';
 import { ArExperienceView } from './components/ArExperienceView';
 import { TourGuideModal } from './components/TourGuideModal';
 import { toggleAudio, isAudioEnabled, getAudioContext } from './utils/audio';
+import { initMonitoring } from './lib/monitoring';
+
+// M15 observability: attach global error handlers once (no-op without VITE_SENTRY_DSN).
+initMonitoring();
 
 // M11: binds the server cart to the logged-in user (guest flow untouched).
 function CartServerBridge(): null {
