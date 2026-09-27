@@ -6,12 +6,10 @@ import {
   ArrowRight,
   Calendar,
   MapPin,
-  Compass,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  Info,
-  Hand
+  Info
 } from 'lucide-react';
 import { ChocolateFactory } from '../types/chocolate';
 import {
@@ -768,50 +766,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
 
       {/* Atmospheric Vignette & Horizon Glow */}
       <div className="absolute inset-0 pointer-events-none bg-radial-[at_50%_40%] from-transparent via-[#140a05]/40 to-[#0c0502]/90" />
-
-      {/* Header Overlay / Title with drag gesture badge */}
-      <div className="absolute top-20 left-0 right-0 z-10 text-center pointer-events-none px-4">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#2b170e]/80 border border-[#d4af37]/30 backdrop-blur-md mb-2 shadow-lg shadow-black/40"
-        >
-          <Compass className="w-4 h-4 text-[#d4af37] animate-pulse" />
-          <span className="text-xs font-semibold tracking-widest uppercase text-[#e5c158]">
-            Archipiélago de Fábricas Patrimoniales
-          </span>
-        </motion.div>
-
-        <motion.h2
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.9, delay: 0.3 }}
-          className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-[#fcf8f2] tracking-tight font-royal"
-        >
-          Ruta del Chocolate de Sucre
-        </motion.h2>
-
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.5 }}
-          className="mt-1 text-xs sm:text-sm text-[#d7c4b7] max-w-xl mx-auto font-light"
-        >
-          Desliza o arrastra con el puntero para recorrer las islas flotantes y descubrir sus historias.
-        </motion.p>
-
-        {/* Tactile drag guide hint */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.7 }}
-          className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1c100a]/75 border border-[#d4af37]/25 backdrop-blur-md text-[11px] text-[#e5c158]/90 shadow-md"
-        >
-          <Hand className="w-3.5 h-3.5 text-[#d4af37] animate-bounce" />
-          <span>Arrastra o desliza hacia los lados para cambiar de isla</span>
-        </motion.div>
-      </div>
 
       {/* Floating Left & Right Navigation Chevrons */}
       <button
