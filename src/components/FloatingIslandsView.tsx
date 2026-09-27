@@ -907,37 +907,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
           ))}
       </AnimatePresence>
 
-      {/* Island Quick Selector Bar (Bottom for desktop) */}
-      <div className="absolute bottom-5 left-6 right-6 z-10 pointer-events-none hidden md:flex justify-between items-center">
-        <div className="flex items-center gap-2 bg-[#1c100a]/85 backdrop-blur-xl px-3.5 py-2 rounded-xl border border-[#d4af37]/25 pointer-events-auto shadow-xl">
-          <span className="text-xs text-[#bda393]">Islas patrimoniales:</span>
-          {factories.map((f, idx) => {
-            const isCurrent = idx === focusedIndex;
-            return (
-              <button
-                key={f.id}
-                onClick={() => selectIslandByIndex(idx)}
-                className={`text-xs px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                  isCurrent
-                    ? 'bg-[#3d2215] text-[#fff] border border-[#d4af37] shadow-sm shadow-[#d4af37]/40 font-semibold'
-                    : 'bg-[#24130b] hover:bg-[#2f1a10] text-[#d7c4b7] border border-[#d4af37]/15'
-                }`}
-              >
-                <span
-                  className={`w-2 h-2 rounded-full transition-transform ${isCurrent ? 'scale-125' : ''}`}
-                  style={{ backgroundColor: f.accentColor }}
-                />
-                {f.name}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="text-right text-xs text-[#a08575] pointer-events-auto bg-[#1c100a]/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-[#d4af37]/10">
-          <span>Chuquisaca, Cuna de la Libertad y Capital del Chocolate</span>
-        </div>
-      </div>
-
       {/* Cinematic Dive Transition overlay */}
       <AnimatePresence>
         {activeFactory && (
