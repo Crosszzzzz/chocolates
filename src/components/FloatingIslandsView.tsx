@@ -13,11 +13,6 @@ import {
 } from 'lucide-react';
 import { ChocolateFactory } from '../types/chocolate';
 import {
-  getIslandFacadeUrl,
-  isIslandFacadeLoaded,
-  preloadIslandFacade,
-} from '../utils/islandFacade';
-import {
   playIslandDiveChime,
   playPedestalHum,
   playIslandSlideSound
@@ -64,9 +59,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     });
   }, []);
 
-  // Tracks which optional image facades finished preloading (procedural stays otherwise)
-  const [facadeReady, setFacadeReady] = useState<Record<string, boolean>>({});
-
   const [hoveredFactory, setHoveredFactory] = useState<ChocolateFactory | null>(null);
   const hoveredFactoryRef = useRef<ChocolateFactory | null>(null);
 
@@ -83,11 +75,10 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const islandGroupsRef = useRef<{ [key: string]: THREE.Group }>({});
-  const haloRingsRef = useRef<{ [key: string]: THREE.Mesh }>({});
   const dustParticlesRef = useRef<THREE.Points | null>(null);
 
-  const targetCameraPos = useRef(new THREE.Vector3(0, 3.2, 7.0));
-  const currentCameraPos = useRef(new THREE.Vector3(0, 3.2, 7.0));
+  const targetCameraPos = useRef(new THREE.Vector3(0, 3.6, 8.6));
+  const currentCameraPos = useRef(new THREE.Vector3(0, 3.6, 8.6));
   const targetLookAt = useRef(new THREE.Vector3(0, 1.0, 1.2));
   const currentLookAt = useRef(new THREE.Vector3(0, 1.0, 1.2));
   const mousePos = useRef({ x: 0, y: 0 });
@@ -180,22 +171,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [factories, activeFactory, goToNextIsland, goToPrevIsland, handleInitiateDive]);
-
-  // Optional image facades: preload `/images/islands/<id>.jpg` per island.
-  // Missing files resolve false via onerror; the procedural render stays.
-  useEffect(() => {
-    let cancelled = false;
-    factories.forEach((factory) => {
-      preloadIslandFacade(factory.id).then((ok) => {
-        if (ok && !cancelled) {
-          setFacadeReady((prev) => (prev[factory.id] ? prev : { ...prev, [factory.id]: true }));
-        }
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [factories]);
 
   // Three.js Scene Setup & Animation Loop
   useEffect(() => {
@@ -309,76 +284,49 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       topPlateau.userData.isFacadePlateau = true;
       group.add(topPlateau);
 
-      // Optional image-facade upgrade: if the JPG already preloaded, skin the
-      // plateau with it; on missing files / load error keep the procedural material.
-      if (isIslandFacadeLoaded(factory.id)) {
+      // Helper: mount a real factory photo as crossed billboards on the island.
+      // Two perpendicular planes keep the storefront readable while orbiting;
+      // on load error a simple gold marker stays so the island never looks empty.
+      const addFactoryPhoto = (group: THREE.Group, url: string) => {
+        const plinth = new THREE.Mesh(
+          new THREE.BoxGeometry(3.6, 0.16, 1.4),
+          new THREE.MeshStandardMaterial({ color: 0x1c100a, roughness: 0.8 })
+        );
+        plinth.position.set(0, 0.42, 0);
+        plinth.castShadow = true;
+        plinth.receiveShadow = true;
+        group.add(plinth);
+
         new THREE.TextureLoader().load(
-          getIslandFacadeUrl(factory.id),
+          url,
           (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
-            topPlateauMat.map = tex;
-            topPlateauMat.needsUpdate = true;
+            const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, toneMapped: false });
+            const geo = new THREE.PlaneGeometry(3.4, 2.0);
+            const front = new THREE.Mesh(geo, mat);
+            front.position.set(0, 1.5, 0);
+            const side = new THREE.Mesh(geo, mat);
+            side.position.set(0, 1.5, 0);
+            side.rotation.y = Math.PI / 2;
+            group.add(front, side);
           },
           undefined,
           () => {
-            // Missing image: keep procedural fallback untouched
+            const marker = new THREE.Mesh(
+              new THREE.BoxGeometry(1.2, 0.9, 0.6),
+              new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.4 })
+            );
+            marker.position.set(0, 1.0, 0);
+            marker.castShadow = true;
+            group.add(marker);
           }
         );
-      }
-
-      // Glowing Halo Ring under the island
-      const ringGeo = new THREE.RingGeometry(2.4, 2.75, 36);
-      ringGeo.rotateX(Math.PI / 2);
-      const ringMat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(factory.accentColor),
-        transparent: true,
-        opacity: 0.2,
-        side: THREE.DoubleSide
-      });
-      const haloRing = new THREE.Mesh(ringGeo, ringMat);
-      haloRing.position.y = -0.15;
-      group.add(haloRing);
-      haloRingsRef.current[factory.id] = haloRing;
+      };
 
       // Architectural Feature for each Factory
       if (factory.id === 'para-ti') {
-        // Red and Gold Sucre Clock Tower & Cocoa Pod
-        const towerBase = new THREE.Mesh(
-          new THREE.BoxGeometry(0.8, 1.4, 0.8),
-          new THREE.MeshStandardMaterial({ color: 0xb01919, roughness: 0.4 })
-        );
-        towerBase.position.set(0, 0.9, 0);
-        towerBase.castShadow = true;
-        group.add(towerBase);
-
-        const dome = new THREE.Mesh(
-          new THREE.SphereGeometry(0.5, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.5),
-          new THREE.MeshStandardMaterial({ color: 0xf1c40f, metalness: 0.7, roughness: 0.25 })
-        );
-        dome.position.set(0, 1.6, 0);
-        group.add(dome);
-
-        const treeTrunk = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.08, 0.1, 0.7, 5),
-          new THREE.MeshStandardMaterial({ color: 0x5c3317 })
-        );
-        treeTrunk.position.set(0.9, 0.5, 0.6);
-        group.add(treeTrunk);
-
-        const treeFoliage = new THREE.Mesh(
-          new THREE.DodecahedronGeometry(0.4, 1),
-          new THREE.MeshStandardMaterial({ color: 0x1b4d20, roughness: 0.8 })
-        );
-        treeFoliage.position.set(0.9, 1.0, 0.6);
-        group.add(treeFoliage);
-
-        const pod = new THREE.Mesh(
-          new THREE.ConeGeometry(0.12, 0.35, 6),
-          new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.8, roughness: 0.3 })
-        );
-        pod.rotation.z = Math.PI * 0.85;
-        pod.position.set(0.85, 0.8, 0.6);
-        group.add(pod);
+        // Real storefront photo replaces the procedural tower
+        addFactoryPhoto(group, '/images/islands/para-ti.jpg');
 
       } else if (factory.id === 'chocolates-sucre') {
         // Sucre "Ciudad Blanca" Colonial Bell Gable & Chocolate Cascade
@@ -417,29 +365,8 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         group.add(cascade);
 
       } else if (factory.id === 'taboada') {
-        // Taboada 1948 - Historic red brick factory with industrial chimney & steam
-        const factoryBuilding = new THREE.Mesh(
-          new THREE.BoxGeometry(1.4, 0.9, 1.1),
-          new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.8 })
-        );
-        factoryBuilding.position.set(0.1, 0.65, 0);
-        factoryBuilding.castShadow = true;
-        group.add(factoryBuilding);
-
-        const chimney = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.16, 0.24, 1.6, 8),
-          new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.7 })
-        );
-        chimney.position.set(-0.5, 1.3, -0.2);
-        chimney.castShadow = true;
-        group.add(chimney);
-
-        const gear = new THREE.Mesh(
-          new THREE.TorusGeometry(0.28, 0.08, 8, 16),
-          new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.8, roughness: 0.3 })
-        );
-        gear.position.set(0.1, 0.65, 0.58);
-        group.add(gear);
+        // Real administration building photo replaces the procedural factory
+        addFactoryPhoto(group, '/images/islands/taboada.jpg');
       }
 
       // Hitbox cylinder for raycasting click / focus
@@ -642,7 +569,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       // Update islands floating & highlight animation
       factories.forEach((factory, i) => {
         const group = islandGroupsRef.current[factory.id];
-        const halo = haloRingsRef.current[factory.id];
         if (!group) return;
 
         const isFocused = currentFocusedFactory && currentFocusedFactory.id === factory.id;
@@ -657,25 +583,11 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         group.position.y = THREE.MathUtils.lerp(group.position.y, targetY, 0.1);
         group.rotation.y = Math.sin(elapsed * 0.3 + i) * 0.05;
 
-        // Subtle scale: focused island is prominent, with a gentle touch on hover
-        const targetScale = isFocused ? (isHovered ? 1.08 : 1.04) : 0.92;
+        // Compact scale so each island fits fully in frame
+        const targetScale = isFocused ? (isHovered ? 1.0 : 0.96) : 0.84;
         group.scale.setScalar(
           THREE.MathUtils.lerp(group.scale.x, targetScale, 0.08)
         );
-
-        // Halo ring rotation: continuous addition via delta, NEVER restarts or jumps!
-        if (halo) {
-          const rotationSpeed = isFocused ? (isHovered ? 0.7 : 0.5) : 0.22;
-          halo.rotation.z += delta * rotationSpeed;
-
-          const targetOpacity = isFocused ? (isHovered ? 0.92 : 0.8) : 0.12;
-          const haloMat = halo.material as THREE.MeshBasicMaterial;
-          haloMat.opacity = THREE.MathUtils.lerp(
-            haloMat.opacity,
-            targetOpacity,
-            0.1
-          );
-        }
       });
 
       // Frame the currently focused island with the camera
@@ -685,8 +597,8 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
 
         targetCameraPos.current.set(
           fx + mousePos.current.x * 0.6 - dragInfluence,
-          fy + 2.3 + mousePos.current.y * 0.35,
-          fz + 5.9
+          fy + 2.6 + mousePos.current.y * 0.35,
+          fz + 7.4
         );
 
         targetLookAt.current.set(
@@ -724,34 +636,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       renderer.dispose();
     };
   }, [factories, onSelectFactory, goToNextIsland, goToPrevIsland, handleInitiateDive, selectIslandByIndex]);
-
-  // When a facade image finishes preloading, skin the plateau in place.
-  // Runs again on factories change so scene rebuilds get re-skinned.
-  useEffect(() => {
-    const ids = Object.keys(facadeReady);
-    if (ids.length === 0) return;
-    const loader = new THREE.TextureLoader();
-    ids.forEach((id) => {
-      const group = islandGroupsRef.current[id];
-      const plateau = group?.children.find((child) => child.userData?.isFacadePlateau) as THREE.Mesh | undefined;
-      if (!plateau) return;
-      const mat = plateau.material as THREE.MeshStandardMaterial;
-      if (mat.userData?.facadeApplied) return;
-      loader.load(
-        getIslandFacadeUrl(id),
-        (tex) => {
-          tex.colorSpace = THREE.SRGBColorSpace;
-          mat.map = tex;
-          mat.needsUpdate = true;
-          mat.userData.facadeApplied = true;
-        },
-        undefined,
-        () => {
-          // Missing image: keep the procedural fallback untouched
-        }
-      );
-    });
-  }, [facadeReady, factories]);
 
   const focusedFactory = factories[focusedIndex] || factories[0];
 
@@ -794,10 +678,10 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 15, scale: 0.96 }}
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute bottom-20 md:bottom-22 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
+              className="absolute bottom-8 sm:bottom-10 md:bottom-12 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
             >
-              <div className="bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl px-4 py-2 flex items-center justify-between gap-3 shadow-2xl shadow-black/90">
-                <div className="flex min-w-0 items-center gap-2">
+              <div className="bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl px-4 py-2 flex items-center justify-between gap-2 sm:gap-3 shadow-2xl shadow-black/90">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   <span
                     className="w-2.5 h-2.5 shrink-0 rounded-full ring-2 ring-[#d4af37]/30"
                     style={{ backgroundColor: focusedFactory.accentColor }}
@@ -806,15 +690,27 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                     {focusedFactory.name}
                   </h3>
                 </div>
-                <button
-                  type="button"
-                  onClick={toggleHudCollapsed}
-                  aria-expanded={false}
-                  aria-label="Mostrar información de la isla"
-                  className="min-w-[44px] min-h-[44px] w-11 h-11 shrink-0 rounded-xl bg-[#2e1910] border border-[#d4af37]/30 text-[#e5c158] hover:text-white hover:border-[#d4af37] flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  <ChevronUp className="w-5 h-5" />
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleInitiateDive(focusedFactory)}
+                    aria-label={`Entrar a la Isla ${focusedFactory.name}`}
+                    className="min-h-[44px] px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex shrink-0 items-center gap-1.5 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
+                  >
+                    <span className="sm:hidden">Entrar</span>
+                    <span className="hidden sm:inline">Entrar a la Isla</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-[#1a0f08]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleHudCollapsed}
+                    aria-expanded={false}
+                    aria-label="Mostrar información de la isla"
+                    className="min-w-[44px] min-h-[44px] w-11 h-11 shrink-0 rounded-xl bg-[#2e1910] border border-[#d4af37]/30 text-[#e5c158] hover:text-white hover:border-[#d4af37] flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <ChevronUp className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             </motion.div>
           ) : (
@@ -824,7 +720,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 15, scale: 0.96 }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute bottom-20 md:bottom-22 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
+            className="absolute bottom-8 sm:bottom-10 md:bottom-12 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
           >
             <div className="bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl p-4 sm:p-5 shadow-2xl shadow-black/90">
               
