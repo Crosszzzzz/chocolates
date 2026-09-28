@@ -49,3 +49,14 @@
     animation: none;
   }
 }
+
+/* Auth inputs: stop Chrome autofill from painting fields white/light-blue.
+   Keeps the dark chocolate surface with light text in every state. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 60px #120a06 inset;
+  -webkit-text-fill-color: #fcf8f2;
+  caret-color: #fcf8f2;
+}

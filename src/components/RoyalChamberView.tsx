@@ -101,26 +101,6 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
     inlay.position.y = -0.94;
     scene.add(inlay);
 
-    // Floating Gold Dust / Aura
-    const dustCount = 350;
-    const dustGeo = new THREE.BufferGeometry();
-    const dustPos = new Float32Array(dustCount * 3);
-    for (let i = 0; i < dustCount; i++) {
-      dustPos[i * 3] = (Math.random() - 0.5) * 16;
-      dustPos[i * 3 + 1] = Math.random() * 5 - 0.5;
-      dustPos[i * 3 + 2] = (Math.random() - 0.5) * 10;
-    }
-    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
-    const dustMat = new THREE.PointsMaterial({
-      color: 0xf1c40f,
-      size: 0.08,
-      transparent: true,
-      opacity: 0.7,
-      blending: THREE.AdditiveBlending
-    });
-    const dust = new THREE.Points(dustGeo, dustMat);
-    scene.add(dust);
-
     // 6. Pedestals & Floating Royal Chocolate Products
     const products = factory.products;
     const spacing = 2.7;
@@ -378,9 +358,6 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
           );
         }
       });
-
-      // Ambient dust rotation
-      dust.rotation.y = elapsed * 0.03;
 
       renderer.render(scene, camera);
     };

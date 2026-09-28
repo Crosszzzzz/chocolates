@@ -42,6 +42,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { user, role, isAdmin, isEmpresa, isLoading, errorEs, signInWithGoogle, signOut } = useAuth();
   const { count } = useCart();
   const [authOpen, setAuthOpen] = useState(false);
+  // Search lives only with the products (Sala Real + detail views), never on the main islands screen
+  const showSearch = phase === 'chamber' || phase === 'unwrap' || phase === 'ar';
   return (
     <AnimatePresence>
       {visible && (
@@ -69,7 +71,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-semibold uppercase tracking-wider text-[#d4af37]">Sucre, Bolivia</span>
-                    <span className="text-[10px] px-1.5 py-0.2 bg-[#d4af37]/15 text-[#e5c158] rounded border border-[#d4af37]/30">3D</span>
+                    {phase !== 'archipelago' && (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-[#d4af37]/15 text-[#e5c158] rounded border border-[#d4af37]/30">3D</span>
+                    )}
                   </div>
                   <h1 className="text-sm sm:text-base font-bold text-[#fcf8f2] tracking-tight font-serif-luxury leading-tight truncate">
                     Ruta del Chocolate
@@ -89,8 +93,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
-            {/* M10 catalog search (live /api/search, local fallback) */}
-            {onSearchPick && (
+            {/* M10 catalog search (live /api/search, local fallback) — product views only */}
+            {onSearchPick && showSearch && (
               <div className="hidden md:block flex-1 max-w-xs">
                 <SearchBox onPick={(entry) => onSearchPick(entry.sku)} />
               </div>

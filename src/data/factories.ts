@@ -13,7 +13,7 @@ export const FACTORIES: ChocolateFactory[] = [
     islandColor: '#d63031',
     brandColor: '#b01919',
     accentColor: '#f1c40f',
-    islandPosition: [-3.8, 0.4, -1],
+    islandPosition: [0, 0.4, 1.2],
     historyMilestones: [
       {
         year: '1989',
@@ -115,7 +115,7 @@ export const FACTORIES: ChocolateFactory[] = [
     islandColor: '#2980b9',
     brandColor: '#1a365d',
     accentColor: '#38bdf8',
-    islandPosition: [0, 0.9, 1.2],
+    islandPosition: [-3.8, 0.9, -1],
     historyMilestones: [
       {
         year: '1780',
