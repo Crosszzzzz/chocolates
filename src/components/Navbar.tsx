@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Building2, Volume2, VolumeX, ChevronRight, HelpCircle, LogIn, LogOut, ShieldCheck, ShoppingCart, User, Sun, Moon, ArrowLeft } from 'lucide-react';
+import { Building2, ChevronRight, HelpCircle, LogIn, LogOut, ShieldCheck, ShoppingCart, User, Sun, Moon, ArrowLeft } from 'lucide-react';
 import { ChocolateFactory, RoutePhase } from '../types/chocolate';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -13,8 +13,6 @@ interface NavbarProps {
   currentFactory: ChocolateFactory | null;
   phase: RoutePhase;
   visible: boolean;
-  soundEnabled: boolean;
-  onToggleSound: () => void;
   onSelectFactory: (factory: ChocolateFactory) => void;
   factories: ChocolateFactory[];
   onReturnToArchipelago: () => void;
@@ -27,8 +25,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentFactory,
   phase,
   visible,
-  soundEnabled,
-  onToggleSound,
   onSelectFactory,
   factories,
   onReturnToArchipelago,
@@ -146,19 +142,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <Sun className="w-4 h-4 text-[#e5c158]" />
                 ) : (
                   <Moon className="w-4 h-4 text-[#8a6216]" />
-                )}
-              </button>
-
-              {/* Sound Toggle */}
-              <button
-                onClick={onToggleSound}
-                className="w-8 h-8 rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] hover:bg-[#e2cda4] hover:dark:bg-[#3d2215] border border-[#d4af37]/25 flex items-center justify-center text-[#d4af37] transition-colors cursor-pointer"
-                title={soundEnabled ? 'Desactivar efectos de sonido' : 'Activar efectos sensoriales'}
-              >
-                {soundEnabled ? (
-                  <Volume2 className="w-4 h-4 text-[#8a6216] dark:text-[#e5c158]" />
-                ) : (
-                  <VolumeX className="w-4 h-4 text-[#8a7265]" />
                 )}
               </button>
 

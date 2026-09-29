@@ -13,7 +13,6 @@ import { RoyalChamberView } from './components/RoyalChamberView';
 import { UnwrappingModalView } from './components/UnwrappingModalView';
 import { ArExperienceView } from './components/ArExperienceView';
 import { TourGuideModal } from './components/TourGuideModal';
-import { toggleAudio, getAudioContext, playIslandDiveChime } from './utils/audio';
 import { initMonitoring } from './lib/monitoring';
 
 // Timed dive: archipelago -> diving -> chamber (matches island camera travel).
@@ -43,7 +42,6 @@ function CartServerBridge(): null {
 export default function App() {  const [currentFactory, setCurrentFactory] = useState<ChocolateFactory | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductSpec | null>(null);
   const [phase, setPhase] = useState<RoutePhase>('archipelago');
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [navbarVisible, setNavbarVisible] = useState<boolean>(true);
   // PR3 catalog + cart overlay state (visual-no-op 3D, overlay only).
@@ -65,16 +63,6 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
     void fetchCatalog().then(({ entries }) => { if (alive) setCatalog(entries) }); return () => { alive = false };
   }, []);
   const catalogMap = useMemo<CatalogMap>(() => Object.fromEntries(catalog.map((e) => [e.sku, { nameEs: e.nameEs, priceBOB: e.priceBOB, stock: e.stock }])) as CatalogMap, [catalog]);
-
-  // Initialize audio context on first user click
-  useEffect(() => {
-    const handleFirstInteraction = () => {
-      getAudioContext();
-      window.removeEventListener('pointerdown', handleFirstInteraction);
-    };
-    window.addEventListener('pointerdown', handleFirstInteraction);
-    return () => window.removeEventListener('pointerdown', handleFirstInteraction);
-  }, []);
 
   // Update navbar visibility according to user specifications:
   // "desaparecera en las interacciones y aparecera cuando se llegue a los productos o cuando aparezca las fabricas flotando como islas"
@@ -101,11 +89,6 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  const handleToggleSound = () => {
-    const newState = toggleAudio();
-    setSoundEnabled(newState);
-  };
-
   const handleSelectFactory = (factory: ChocolateFactory) => {
     // The islands view re-fires onSelectFactory after its camera travel for
     // the same factory: let the pending dive finish instead of restarting it.
@@ -121,10 +104,8 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
       setPhase('chamber');
       return;
     }
-    // Chime runs in the click gesture (autoplay-safe); the timer then walks
-    // archipelago -> diving -> chamber. Skippable, chamber always reachable.
+    // The timer walks archipelago -> diving -> chamber. Skippable, chamber always reachable.
     divingFactoryId.current = factory.id;
-    playIslandDiveChime();
     setPhase('diving');
     diveTimer.current = setTimeout(() => {
       diveTimer.current = null;
@@ -218,8 +199,6 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
         currentFactory={currentFactory}
         phase={phase}
         visible={navbarVisible}
-        soundEnabled={soundEnabled}
-        onToggleSound={handleToggleSound}
         onSelectFactory={handleShortcutFactory}
         factories={FACTORIES}
         onReturnToArchipelago={handleReturnToArchipelago}
@@ -246,7 +225,6 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
           <RoyalChamberView
             factory={currentFactory}
             onSelectProduct={handleSelectProduct}
-            onReturnToArchipelago={handleReturnToArchipelago}
             catalog={catalogMap}
             onAdded={() => setCartOpen(true)}
           />

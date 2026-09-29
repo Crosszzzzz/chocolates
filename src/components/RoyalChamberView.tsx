@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { ChevronLeft } from 'lucide-react';
 import { ChocolateFactory, ProductSpec } from '../types/chocolate';
 import { useTheme } from '../contexts/ThemeContext';
 import { ProductShowcase } from './ProductShowcase';
@@ -9,7 +8,6 @@ import type { CatalogMap } from './CartDrawer';
 interface RoyalChamberViewProps {
   factory: ChocolateFactory;
   onSelectProduct: (product: ProductSpec) => void;
-  onReturnToArchipelago: () => void;
   /** Live price/stock per SKU, forwarded to ProductShowcase for add-to-cart. */
   catalog: CatalogMap;
   /** Optional: App opens the cart drawer after a successful add. */
@@ -25,7 +23,6 @@ interface RoyalChamberViewProps {
 export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
   factory,
   onSelectProduct,
-  onReturnToArchipelago,
   catalog,
   onAdded,
 }) => {
@@ -138,19 +135,6 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
 
       {/* Atmospheric glow */}
       <div className="pointer-events-none absolute inset-0 bg-radial-[at_50%_35%] from-[#d4af37]/25 via-transparent to-[#c9a86a]/30 dark:from-[#ffd700]/10 dark:to-[#0a0402]/85" />
-
-      {/* Back to islands (centered below the navbar row so it never hides
-          behind the fixed navbar pill; the navbar's own Volver sits in the
-          top row on the left). */}
-      <div className="pointer-events-auto absolute top-[148px] sm:top-[92px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2">
-        <button
-          onClick={onReturnToArchipelago}
-          className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-[#d4af37]/30 bg-[#fffdf8]/80 px-3.5 py-2 text-xs text-[#8a6216] shadow-lg backdrop-blur-md transition-all hover:bg-[#f3e7d3] hover:text-[#2b1a12] dark:bg-[#1c100a]/80 dark:text-[#e5c158] dark:hover:bg-[#2b170e] dark:hover:text-[#fff]"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          <span>Volver a las Islas</span>
-        </button>
-      </div>
 
       {/* Product presentation: on desktop (lg) it reserves the drawer width
           on the right so title + grid stay centered in the free space. */}

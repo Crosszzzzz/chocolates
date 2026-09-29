@@ -48,57 +48,54 @@ export const FACTORIES: ChocolateFactory[] = [
     ],
     products: [
       {
-        id: 'parati-70-silvestre',
-        name: 'Barra 70% Cacao Silvestre Amazónico',
-        subtitle: 'Cosecha salvaje del Alto Beni',
-        cacaoPercentage: 70,
-        weight: '100 g',
-        dimensions: '16.5 x 7.8 x 0.9 cm',
-        heightCm: 16.5,
-        flavorProfile: ['Notas florales de jazmín', 'Toques de frutos rojos silvestres', 'Final amaderado noble'],
-        origin: 'Baures y Alto Beni, Bolivia',
-        description: 'Barra de origen puro elaborada exclusivamente con almendras de cacao silvestre no domesticado. Fermentado en cajas de laurel y conchado lento por 72 horas.',
-        pairing: 'Café de altura de Caranavi o vino tinto Tannat chuquisaqueño',
-        colorHex: '#2b1408',
+        id: 'parati-bolsa-fruta',
+        name: 'Bolsa de Chocolates con Fruta',
+        subtitle: 'Bombones frutales en bolsa artesanal',
+        cacaoPercentage: 55,
+        weight: '250 g',
+        dimensions: '20.0 x 15.0 x 8.0 cm (est.)',
+        heightCm: 12,
+        flavorProfile: ['Frutas confitadas del valle', 'Cacao con leche suave', 'Final fresco frutal'],
+        origin: 'Sucre, Bolivia',
+        description: 'Bolsa artesanal con bombones de chocolate rellenos de fruta seleccionada del valle chuquisaqueño, elaborados con cacao amazónico.',
+        pairing: 'Té de frutos rojos o chicha dulce bien fría',
+        colorHex: '#4a2410',
         wrapperPrimaryColor: '#b01919',
-        wrapperAccentColor: '#e5b85a',
-        badge: 'Cacao Salvaje de Origen',
-        type: 'bar'
+        wrapperAccentColor: '#f9d342',
+        type: 'box'
       },
       {
-        id: 'parati-singani-gran-reserva',
-        name: 'Tableta Gourmet con Singani Gran Reserva',
-        subtitle: 'Cacao al 60% macerado con uva Moscatel',
+        id: 'parati-caja-bombones',
+        name: 'Caja de Bombones',
+        subtitle: 'Surtido fino en estuche Para Ti',
         cacaoPercentage: 60,
-        weight: '90 g',
-        dimensions: '15.8 x 7.5 x 0.8 cm',
-        heightCm: 15.8,
-        flavorProfile: ['Aroma a uva Moscatel de Alejandría', 'Cacao tostado medio', 'Licor aterciopelado'],
-        origin: 'Valles de Cinti & Alto Beni',
-        description: 'La alianza cumbre entre el destilado nacional boliviano (Singani) y el cacao selecto. Una textura que se funde en boca liberando destellos cálidos y aromáticos.',
-        pairing: 'Copita de Singani San Pedro de Yotala',
-        colorHex: '#381c0f',
+        weight: '300 g',
+        dimensions: '22.0 x 16.0 x 5.0 cm (est.)',
+        heightCm: 5,
+        flavorProfile: ['Ganache de cacao amazónico', 'Relleno de singani y fruta', 'Praliné crocante'],
+        origin: 'Sucre, Bolivia',
+        description: 'Estuche de bombones surtidos con ganache, praliné y rellenos frutales, elaborados con cacao silvestre y receta chuquisaqueña.',
+        pairing: 'Café de altura o copa de singani',
+        colorHex: '#3a1b0d',
         wrapperPrimaryColor: '#781212',
         wrapperAccentColor: '#f9d342',
-        badge: 'Edición Bicentenario',
-        type: 'bar'
+        type: 'box'
       },
       {
-        id: 'parati-chirimoya-blanco',
-        name: 'Barra Cacao Blanco & Chirimoya Real',
-        subtitle: 'Manteca pura de cacao con pulpa de valle',
-        cacaoPercentage: 38,
-        weight: '85 g',
-        dimensions: '15.0 x 7.2 x 0.8 cm',
-        heightCm: 15.0,
-        flavorProfile: ['Cremosa manteca pura', 'Chirimoya dulce de los valles', 'Vainilla natural'],
-        origin: 'Valles Templados de Chuquisaca',
-        description: 'Elaborado con manteca desodorizada de primera prensada y liofilizado de chirimoyas seleccionadas de las huertas chuquisaqueñas.',
-        pairing: 'Té blanco o infusión de hierbaluisa',
-        colorHex: '#522b17',
-        wrapperPrimaryColor: '#27ae60',
-        wrapperAccentColor: '#f1c40f',
-        badge: 'Frutos del Valle',
+        id: 'parati-tableta-coco',
+        name: 'Tableta de Chocolate con Coco',
+        subtitle: 'Cacao amazónico con coco rallado',
+        cacaoPercentage: 55,
+        weight: '90 g (est.)',
+        dimensions: '15.0 x 7.5 x 0.8 cm (est.)',
+        heightCm: 15,
+        flavorProfile: ['Coco rallado tostado', 'Cacao con leche suave', 'Final cremoso tropical'],
+        origin: 'Sucre, Bolivia',
+        description: 'Tableta de chocolate con coco rallado, elaborada con cacao amazónico y receta chuquisaqueña de Chocolates Para Ti.',
+        pairing: 'Café con leche o jugo de maracuyá bien frío',
+        colorHex: '#3a2110',
+        wrapperPrimaryColor: '#b01919',
+        wrapperAccentColor: '#f9d342',
         type: 'bar'
       }
     ]
@@ -295,15 +292,16 @@ export const FACTORIES: ChocolateFactory[] = [
 ];
 
 // --- Commerce catalog (PR3, mvp-completo): DB-first with static fallback. ---
-// Prices/stock mirror supabase seed; chirimoya-blanco stock 0 exercises "Sin stock".
-const FALLBACK_PRICE: Record<string, { priceBOB: number; stock: number }> = {
-  'parati-70-silvestre': { priceBOB: 45, stock: 24 }, 'parati-singani-gran-reserva': { priceBOB: 52.5, stock: 18 }, 'parati-chirimoya-blanco': { priceBOB: 38, stock: 0 },
+// Prices/stock mirror supabase seed.
+const FALLBACK_PRICE: Record<string, { priceBOB: number; stock: number; imageUrl?: string }> = {
+  'parati-bolsa-fruta': { priceBOB: 85, stock: 20, imageUrl: '/images/parati-bolsa-fruta.png' }, 'parati-caja-bombones': { priceBOB: 120, stock: 20, imageUrl: '/images/parati-caja-bombones.png' },
+  'parati-tableta-coco': { priceBOB: 48, stock: 20, imageUrl: '/images/parati-tableta-coco.png' },
   'sucre-colonial-canela': { priceBOB: 32, stock: 30 }, 'sucre-negro-sal-uyuni': { priceBOB: 48, stock: 15 }, 'sucre-nuez-macadamia': { priceBOB: 42, stock: 12 },
   'taboada-submarino-puro': { priceBOB: 28, stock: 40 }, 'taboada-amargo-almendras': { priceBOB: 39.5, stock: 22 }, 'taboada-caja-realeza': { priceBOB: 85, stock: 10 },
 };
 export function toCommerce(p: ProductSpec): CommerceProduct {
   const f = FALLBACK_PRICE[p.id] ?? { priceBOB: 0, stock: 0 };
-  return { ...p, sku: p.id, priceBOB: f.priceBOB, stock: f.stock };
+  return { ...p, sku: p.id, priceBOB: f.priceBOB, stock: f.stock, ...(f.imageUrl ? { imageUrl: f.imageUrl } : {}) };
 }
 export interface CatalogEntry { sku: string; nameEs: string; priceBOB: number; stock: number }
 // Bound every catalog fetch: a hung /api/* must never stall the UI.

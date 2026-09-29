@@ -19,7 +19,6 @@ import { ProductSpec, ChocolateFactory } from '../types/chocolate';
 import { useCart } from '../contexts/CartContext';
 import { toCommerce } from '../data/factories';
 import { ProductReviews } from './ProductReviews';
-import { playFoilTearSound, playChocolateSnapSound } from '../utils/audio';
 import { useTheme } from '../contexts/ThemeContext';
 import {
   type WrapState,
@@ -405,7 +404,6 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
     const tearPiece = (piece: WrapperPiece) => {
       if (piece.torn) return;
       piece.torn = true;
-      playFoilTearSound();
 
       // Launch torn piece outward and downward with spin
       piece.velocity.set(
@@ -430,7 +428,6 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
         wrapStateRef.current = 'unwrapped';
         setWrapState('unwrapped');
         saveWrapState(toCommerce(product).sku, 'unwrapped');
-        playChocolateSnapSound();
         confetti({
           particleCount: 60,
           spread: 70,
@@ -600,7 +597,6 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
       setTimeout(() => {
         if (!piece.torn) {
           piece.torn = true;
-          playFoilTearSound();
           piece.velocity.set(
             (Math.random() - 0.5) * 0.09,
             -0.08 - Math.random() * 0.06,
@@ -619,7 +615,6 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
     setWrap('unwrapped');
     setTimeout(() => {
       setIsFullyUnwrapped(true);
-      playChocolateSnapSound();
       confetti({
         particleCount: 50,
         spread: 60,
@@ -647,7 +642,6 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
     setUnwrapProgress(0);
     setIsFullyUnwrapped(false);
     setWrap('wrapped');
-    playFoilTearSound();
   };
 
   // M4: intermediate state — pieces half-displaced with partial opacity.
@@ -657,7 +651,6 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
       chocolateBarGroupRef.current.rotation.set(0, 0, 0);
     }
     setWrap('peeking');
-    playFoilTearSound();
   };
 
   // M4: cycle wrapped → peeking → unwrapped → wrapped.

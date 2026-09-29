@@ -11,12 +11,8 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { ChocolateFactory } from '../types/chocolate';
-import {
-  playIslandDiveChime,
-  playPedestalHum,
-  playIslandSlideSound
-} from '../utils/audio';
 import { useTheme } from '../contexts/ThemeContext';
+import { SucursalesModal } from './SucursalesModal';
 
 interface FloatingIslandsViewProps {
   factories: ChocolateFactory[];
@@ -56,6 +52,8 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   // WebGL may be unavailable (blocked GPU, headless, driver crash).
   // Keep the error in state so we render a navigable fallback, never a black screen.
   const [webglError, setWebglError] = useState<string | null>(null);
+  // Sucursales modal: real Para Ti branches + factory, opened from both HUD states.
+  const [sucursalesOpen, setSucursalesOpen] = useState<boolean>(false);
   // Black-scene guard: a context can exist yet never produce a frame
   // (dark clear, light/fog misconfig, frozen loop) while webglError stays null.
   const framesRenderedRef = useRef<number>(0);
@@ -136,7 +134,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     carouselRotTarget.current -= (Math.PI * 2) / factories.length;
     setFocusedIndex((prev) => {
       const next = (prev + 1) % factories.length;
-      playIslandSlideSound();
       return next;
     });
   }, [factories.length]);
@@ -146,7 +143,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     carouselRotTarget.current += (Math.PI * 2) / factories.length;
     setFocusedIndex((prev) => {
       const next = (prev - 1 + factories.length) % factories.length;
-      playIslandSlideSound();
       return next;
     });
   }, [factories.length]);
@@ -162,7 +158,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       const steps = forward > n / 2 ? forward - n : forward;
       carouselRotTarget.current -= steps * ((Math.PI * 2) / n);
       setFocusedIndex(index);
-      playIslandSlideSound();
     }
   }, [factories.length]);
 
@@ -173,7 +168,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     setActiveFactory(factory);
     hoveredFactoryRef.current = null;
     setHoveredFactory(null);
-    playIslandDiveChime();
 
     // Camera zooms deeply into the island's live carousel position
     const livePos = islandGroupsRef.current[factory.id]?.position;
@@ -903,9 +897,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         if (found?.id !== hoveredFactoryRef.current?.id) {
           hoveredFactoryRef.current = found;
           setHoveredFactory(found);
-          if (found) {
-            playPedestalHum();
-          }
         }
       }
     };
@@ -1237,6 +1228,15 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                 <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setSucursalesOpen(true)}
+                    aria-label={`Ver sucursales de ${focusedFactory.name}`}
+                    className="min-h-[44px] px-3 sm:px-4 py-2 rounded-xl border border-[#d4af37]/50 bg-transparent text-[#8a6216] dark:text-[#e5c158] font-bold text-xs flex shrink-0 items-center gap-1.5 hover:bg-[#d4af37]/15 hover:border-[#d4af37] active:scale-95 transition-all cursor-pointer"
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Mapa</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleInitiateDive(focusedFactory)}
                     aria-label={`Entrar a la Isla ${focusedFactory.name}`}
                     className="min-h-[44px] px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#8a6216] dark:via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex shrink-0 items-center gap-1.5 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
@@ -1318,6 +1318,15 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
 
                 {/* Primary Dive Button */}
                 <button
+                  type="button"
+                  onClick={() => setSucursalesOpen(true)}
+                  aria-label={`Ver sucursales de ${focusedFactory.name}`}
+                  className="min-h-[44px] px-3 sm:px-4 py-2 rounded-xl border border-[#d4af37]/50 bg-transparent text-[#8a6216] dark:text-[#e5c158] font-bold text-xs flex shrink-0 items-center gap-1.5 hover:bg-[#d4af37]/15 hover:border-[#d4af37] active:scale-95 transition-all cursor-pointer"
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>Cómo llegar</span>
+                </button>
+                <button
                   onClick={() => handleInitiateDive(focusedFactory)}
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#8a6216] dark:via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex shrink-0 items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
                 >
@@ -1357,6 +1366,13 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <SucursalesModal
+        open={sucursalesOpen}
+        onClose={() => setSucursalesOpen(false)}
+        factoryId={focusedFactory.id}
+        factoryName={focusedFactory.name}
+      />
 
     </div>
   );

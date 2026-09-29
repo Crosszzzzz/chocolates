@@ -3,7 +3,7 @@ import { AnimatePresence } from 'motion/react';
 import { ScanLine } from 'lucide-react';
 import type { ProductSpec } from '../types/chocolate';
 import { buildShowcaseCards, type ShowcaseCard } from '../utils/productShowcase';
-import { resolveScannedModelUrl, resolveScannedUsdzUrl } from '../utils/scannedModels';
+import { resolveProductAssets } from '../data/productAssets';
 import type { CatalogMap } from './CartDrawer';
 import { ArModelView } from './ArModelView';
 import { ScannedModel3DViewer } from './ScannedModel3DViewer';
@@ -25,12 +25,9 @@ interface ProductShowcaseProps {
   onDrawerChange?: (open: boolean) => void;
 }
 
-// Shared scanned assets: the AR view opens wrapped, the 3D view unwrapped,
-// and the toggle in each viewer swaps between them (plus their USDZ pair).
-const WRAPPED_URL = resolveScannedModelUrl('wrapped');
-const UNWRAPPED_URL = resolveScannedModelUrl('unwrapped');
-const WRAPPED_IOS_URL = resolveScannedUsdzUrl('wrapped');
-const UNWRAPPED_IOS_URL = resolveScannedUsdzUrl('unwrapped');
+// Per-product AR/3D assets resolve through `resolveProductAssets(sku)` at
+// render time (see the modals below): bars share the scanned captures today,
+// and a future per-SKU drop-in only touches `src/data/productAssets.ts`.
 
 /** CSS-only chocolate-bar miniature driven by the product's brand palette. */
 const BarThumbnail: React.FC<{ card: ShowcaseCard }> = ({ card }) => (
@@ -249,30 +246,47 @@ export const ProductShowcase: React.FC<ProductShowcaseProps> = ({ products, onOp
         )}
       </AnimatePresence>
 
-      {arProduct && (
-        <ArModelView
-          modelUrl={WRAPPED_URL}
-          title={arProduct.name}
-          iosSrc={WRAPPED_IOS_URL}
-          variantUrls={{
-            wrappedUrl: WRAPPED_URL,
-            unwrappedUrl: UNWRAPPED_URL,
-            wrappedIosSrc: WRAPPED_IOS_URL,
-            unwrappedIosSrc: UNWRAPPED_IOS_URL,
-          }}
-          initialVariant="wrapped"
-          onClose={() => setArProduct(null)}
-        />
-      )}
-      {modelProduct && (
-        <ScannedModel3DViewer
-          modelUrl={UNWRAPPED_URL}
-          title={modelProduct.name}
-          variantUrls={{ wrappedUrl: WRAPPED_URL, unwrappedUrl: UNWRAPPED_URL }}
-          initialVariant="unwrapped"
-          onClose={() => setModelProduct(null)}
-        />
-      )}
+      {arProduct &&
+        (() => {
+          const assets = resolveProductAssets(arProduct.id);
+          if (!assets.wrappedGlb) return null;
+          return (
+            <ArModelView
+              modelUrl={assets.wrappedGlb}
+              title={arProduct.name}
+              iosSrc={assets.wrappedUsdz ?? null}
+              variantUrls={
+                assets.unwrappedGlb
+                  ? {
+                      wrappedUrl: assets.wrappedGlb,
+                      unwrappedUrl: assets.unwrappedGlb,
+                      wrappedIosSrc: assets.wrappedUsdz ?? null,
+                      unwrappedIosSrc: assets.unwrappedUsdz ?? null,
+                    }
+                  : null
+              }
+              initialVariant="wrapped"
+              poster={assets.photo}
+              targetLongestCm={assets.targetLongestCm}
+              onClose={() => setArProduct(null)}
+            />
+          );
+        })()}
+      {modelProduct &&
+        (() => {
+          const assets = resolveProductAssets(modelProduct.id);
+          if (!assets.unwrappedGlb || !assets.wrappedGlb) return null;
+          return (
+            <ScannedModel3DViewer
+              modelUrl={assets.unwrappedGlb}
+              title={modelProduct.name}
+              variantUrls={{ wrappedUrl: assets.wrappedGlb, unwrappedUrl: assets.unwrappedGlb }}
+              initialVariant="unwrapped"
+              targetLongestCm={assets.targetLongestCm}
+              onClose={() => setModelProduct(null)}
+            />
+          );
+        })()}
     </div>
   );
 };

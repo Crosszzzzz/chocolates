@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FACTORIES } from '../data/factories';
+import { resolveProductAssets } from '../data/productAssets';
 import {
   addToCartButtonState,
   buildShowcaseCards,
@@ -9,7 +10,8 @@ import {
 
 describe('buildShowcaseCards', () => {
   it('gives every bar product the AR + 3D actions and its brand palette', () => {
-    const bar = FACTORIES[0].products[0];
+    const bar = FACTORIES[0].products.find((p) => p.type === 'bar')!;
+    expect(bar).toBeDefined();
     const [card] = buildShowcaseCards([bar]);
     expect(card.sku).toBe(bar.id);
     expect(card.name).toBe(bar.name);
@@ -31,13 +33,14 @@ describe('buildShowcaseCards', () => {
   });
 
   it('carries the boutique hierarchy (subtitle, cacao, weight, badge, photo)', () => {
-    const bar = FACTORIES[0].products[0];
+    const bar = FACTORIES[0].products.find((p) => p.type === 'bar')!;
+    expect(bar).toBeDefined();
     const [card] = buildShowcaseCards([bar]);
     expect(card.subtitle).toBe(bar.subtitle);
     expect(card.cacaoPercentage).toBe(bar.cacaoPercentage);
     expect(card.weight).toBe(bar.weight);
     expect(card.badge).toBe(bar.badge);
-    expect(card.photoUrl).toBe(resolveShowcaseProductPhotoUrl());
+    expect(card.photoUrl).toBe(resolveProductAssets(bar.id).photo);
   });
 });
 

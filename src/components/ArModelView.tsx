@@ -25,6 +25,10 @@ interface ArModelViewProps {
   variantUrls?: ArVariantUrls | null;
   /** Which variant shows first when `variantUrls` is set. */
   initialVariant?: ScannedVariant;
+  /** Packshot shown while the model loads (`model-viewer` poster). */
+  poster?: string | null;
+  /** Real-world longest edge in cm the scan is normalized to. */
+  targetLongestCm?: number;
   onClose: () => void;
 }
 
@@ -52,10 +56,11 @@ function isIosDevice(): boolean {
   }
 }
 
-async function measureRealScale(url: string): Promise<number> {
-  const cached = scaleCache.get(url);
+async function measureRealScale(url: string, targetLongestCm: number): Promise<number> {
+  const cacheKey = `${url}@${targetLongestCm}`;
+  const cached = scaleCache.get(cacheKey);
   if (cached !== undefined) return cached;
-  const loaded = await loadModelFromUrl(url, { targetLongestCm: BAR_LONGEST_CM });
+  const loaded = await loadModelFromUrl(url, { targetLongestCm });
   if (!loaded) return 1;
   const scale = loaded.scale > 0 && Number.isFinite(loaded.scale) ? loaded.scale : 1;
   loaded.object.traverse((child) => {
@@ -70,7 +75,7 @@ async function measureRealScale(url: string): Promise<number> {
       else material?.dispose?.();
     }
   });
-  scaleCache.set(url, scale);
+  scaleCache.set(cacheKey, scale);
   return scale;
 }
 
@@ -87,6 +92,8 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
   iosSrc,
   variantUrls,
   initialVariant = 'wrapped',
+  poster,
+  targetLongestCm = BAR_LONGEST_CM,
   onClose,
 }) => {
   const [phase, setPhase] = useState<Phase>('loading');
@@ -114,7 +121,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
     let alive = true;
     setPhase('loading');
     setStatusMessage(null);
-    void Promise.all([loadModelViewer(), measureRealScale(activeUrl)]).then(([defined, realScale]) => {
+    void Promise.all([loadModelViewer(), measureRealScale(activeUrl, targetLongestCm)]).then(([defined, realScale]) => {
       if (!alive) return;
       setScale(realScale);
       setPhase(defined ? 'ready' : 'unavailable');
@@ -122,7 +129,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
     return () => {
       alive = false;
     };
-  }, [activeUrl]);
+  }, [activeUrl, targetLongestCm]);
 
   // model-viewer emits `ar-status`; surface failures as a friendly note instead
   // of letting the native AR attempt fail silently. The `error` event covers
@@ -275,6 +282,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                   ref={viewerRef}
                   src={activeUrl}
                   {...(quickLookAvailable ? { 'ios-src': activeIosSrc as string } : {})}
+                  {...(poster ? { poster } : {})}
                   ar={true}
                   ar-modes="webxr scene-viewer quick-look"
                   ar-placement="floor"
@@ -287,6 +295,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                   exposure="1.35"
                   scale={String(scale)}
                   interaction-prompt="none"
+                  loading="lazy"
                   style={{ width: '100%', height: 'clamp(300px, 52dvh, 420px)', backgroundColor: 'transparent' }}
                 />
               </div>

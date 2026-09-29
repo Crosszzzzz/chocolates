@@ -24,6 +24,8 @@ interface ScannedModel3DViewerProps {
   variantUrls?: Model3DVariantUrls | null;
   /** Which variant shows first when `variantUrls` is set. */
   initialVariant?: ScannedVariant;
+  /** Real-world longest edge in cm the scan is normalized to. */
+  targetLongestCm?: number;
   onClose: () => void;
 }
 
@@ -38,6 +40,7 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
   title,
   variantUrls,
   initialVariant = 'unwrapped',
+  targetLongestCm = BAR_LONGEST_CM,
   onClose,
 }) => {
   const { theme } = useTheme();
@@ -79,26 +82,26 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
     // Bright catalogue look: filmic tone mapping lifts the dark scan
     // without touching the real-world scale (15 x 7.2 x 0.8 cm).
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
+    renderer.toneMappingExposure = 0.95;
     container.appendChild(renderer.domElement);
 
     // Hemisphere gradient (warm sky / cocoa ground) keeps dark GLB albedo
     // readable; ambient + warm key + gold rim + cool front fill sculpt it.
-    const hemi = new THREE.HemisphereLight(0xfff6e6, 0x5c3a22, 1.1);
+    const hemi = new THREE.HemisphereLight(0xfff6e6, 0x5c3a22, 0.85);
     scene.add(hemi);
     hemiRef.current = hemi;
-    const ambient = new THREE.AmbientLight(0xfff6e8, 2.0);
+    const ambient = new THREE.AmbientLight(0xfff6e8, 1.5);
     scene.add(ambient);
     ambientRef.current = ambient;
-    const key = new THREE.DirectionalLight(0xfff1d6, 3.0);
+    const key = new THREE.DirectionalLight(0xfff1d6, 2.2);
     key.position.set(0.4, 0.7, 0.6);
     scene.add(key);
     keyRef.current = key;
-    const rim = new THREE.DirectionalLight(0xffd98a, 2.2);
+    const rim = new THREE.DirectionalLight(0xffd98a, 1.6);
     rim.position.set(-0.5, 0.3, -0.6);
     scene.add(rim);
     rimRef.current = rim;
-    const fill = new THREE.DirectionalLight(0xffe9c4, 1.4);
+    const fill = new THREE.DirectionalLight(0xffe9c4, 1.0);
     fill.position.set(-0.6, 0.2, 0.7);
     scene.add(fill);
     fillRef.current = fill;
@@ -121,7 +124,7 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
       renderer.render(scene, camera);
     };
 
-    void loadModelFromUrl(activeUrl, { targetLongestCm: BAR_LONGEST_CM, timeoutMs: 30000 }).then(
+    void loadModelFromUrl(activeUrl, { targetLongestCm, timeoutMs: 30000 }).then(
       (loaded) => {
         if (!loaded) {
           if (!disposed) setStatus('error');
@@ -148,12 +151,36 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
             if (typeof std.metalness === 'number') std.metalness = Math.min(std.metalness, 0.3);
             if (std.emissive instanceof THREE.Color) {
               std.emissive.set(0x1a0d05);
-              std.emissiveIntensity = 0.25;
+              std.emissiveIntensity = 0.18;
             }
             std.needsUpdate = true;
           });
         });
         scene.add(model);
+        // Frame the model to fill ~70-80% of the viewport height regardless
+        // of its real-world size (a 5 cm box and a 15 cm bar normalize to
+        // very different scene radii). Exact-fit distance for the bounding
+        // sphere is radius / sin(fov/2); the 1.25x margin keeps the silhouette
+        // inside the frame on orbit while filling the view without zoom.
+        // controls.target follows the sphere center so small products don't
+        // sit tiny in the middle. min/maxDistance scale with the fit so
+        // close-ups stay allowed but the default already fills the view.
+        {
+          const box = new THREE.Box3().setFromObject(model);
+          const sphere = box.getBoundingSphere(new THREE.Sphere());
+          const radius = Math.max(sphere.radius, 1e-4);
+          const fitDistance =
+            (radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2))) * 1.25;
+          const viewDir = new THREE.Vector3(0, 0.21, 1).normalize();
+          camera.position.copy(sphere.center).addScaledVector(viewDir, fitDistance);
+          camera.near = Math.max(fitDistance / 100, 1e-4);
+          camera.far = fitDistance * 100;
+          camera.updateProjectionMatrix();
+          controls.target.copy(sphere.center);
+          controls.minDistance = fitDistance * 0.35;
+          controls.maxDistance = fitDistance * 3;
+          controls.update();
+        }
         setStatus('ready');
         animate();
       },
@@ -188,22 +215,22 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
       }
       renderer.dispose();
     };
-  }, [activeUrl]);
+  }, [activeUrl, targetLongestCm]);
 
   useEffect(() => {
     const light = theme === 'light';
     if (hemiRef.current) {
       hemiRef.current.color.set(light ? 0xfffaf2 : 0xfff6e6);
       hemiRef.current.groundColor.set(light ? 0x8a6a45 : 0x5c3a22);
-      hemiRef.current.intensity = light ? 1.2 : 1.1;
+      hemiRef.current.intensity = light ? 0.9 : 0.85;
     }
     if (ambientRef.current) {
       ambientRef.current.color.set(light ? 0xfffaf2 : 0xfff6e8);
-      ambientRef.current.intensity = light ? 2.1 : 2.0;
+      ambientRef.current.intensity = light ? 1.6 : 1.5;
     }
-    if (keyRef.current) keyRef.current.intensity = light ? 3.2 : 3.0;
-    if (rimRef.current) rimRef.current.intensity = light ? 2.0 : 2.2;
-    if (fillRef.current) fillRef.current.intensity = light ? 1.5 : 1.4;
+    if (keyRef.current) keyRef.current.intensity = light ? 2.4 : 2.2;
+    if (rimRef.current) rimRef.current.intensity = light ? 1.5 : 1.6;
+    if (fillRef.current) fillRef.current.intensity = light ? 1.1 : 1.0;
   }, [theme]);
 
   const subtitle = variantUrls
@@ -295,12 +322,12 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
         <div className="relative">
           <div
             ref={containerRef}
-            className="h-[clamp(300px,52dvh,420px)] w-full bg-[radial-gradient(ellipse_at_center,#fff8ea_0%,#f7e8c8_45%,#e8c98a_100%)] dark:bg-[radial-gradient(ellipse_at_center,#4a2a14_0%,#241209_55%,#0e0503_100%)]"
+            className="h-[clamp(300px,52dvh,420px)] w-full bg-[radial-gradient(ellipse_at_center,#fbf3df_0%,#f1e2c0_45%,#dfc084_100%)] dark:bg-[radial-gradient(ellipse_at_center,#38200f_0%,#1d0f07_55%,#0e0503_100%)]"
           />
-          {/* Gold radial glow so the dark bar reads as silhouette-free */}
+          {/* Soft gold glow so the dark bar reads without silhouette washout */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.28)_0%,transparent_62%)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.15)_0%,transparent_50%)]"
           />
           {status === 'loading' && (
             <div

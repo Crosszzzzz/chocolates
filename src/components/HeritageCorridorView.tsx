@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ArrowRight, Quote, ChevronLeft } from 'lucide-react';
 import { ChocolateFactory, HistoryMilestone } from '../types/chocolate';
-import { playPedestalHum } from '../utils/audio';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface HeritageCorridorViewProps {
@@ -489,7 +488,6 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
 
   // Jump to next or previous milestone
   const navigateMilestone = (direction: 'next' | 'prev') => {
-    playPedestalHum();
     const milestones = factory.historyMilestones;
     let nextIndex = direction === 'next' ? currentMilestoneIndex + 1 : currentMilestoneIndex - 1;
     if (nextIndex < 0) nextIndex = 0;
@@ -502,7 +500,6 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
   };
 
   const jumpToVault = () => {
-    playPedestalHum();
     targetZ.current = -corridorLength + 13;
   };
 
