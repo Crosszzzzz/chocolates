@@ -1,5 +1,39 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: `dark:` utilities respond to `.dark` on <html>,
+   which ThemeContext toggles (default dark = original look, pixel-equal). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Brand theme tokens: light cream/espresso is the base (:root),
+   the original chocolate night lives under `.dark`. */
+:root {
+  color-scheme: light;
+  --theme-page: #faf6ef;
+  --theme-page-warm: #f5ead6;
+  --theme-surface: #fffdf8;
+  --theme-card: #ffffff;
+  --theme-chip: #f3e7d3;
+  --theme-ink: #2b1a12;
+  --theme-ink-soft: #5c4433;
+  --theme-ink-muted: #7a5c48;
+  --theme-gold-deep: #8a6216;
+  --theme-line: rgba(138, 98, 22, 0.22);
+}
+
+.dark {
+  color-scheme: dark;
+  --theme-page: #120a06;
+  --theme-page-warm: #1c100a;
+  --theme-surface: #1c100a;
+  --theme-card: #25130b;
+  --theme-chip: #2e1910;
+  --theme-ink: #fcf8f2;
+  --theme-ink-soft: #d7c4b7;
+  --theme-ink-muted: #8a7265;
+  --theme-gold-deep: #e5c158;
+  --theme-line: rgba(212, 175, 55, 0.25);
+}
+
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -14,18 +48,27 @@
   }
 }
 
-/* Custom smooth dark chocolate scrollbar */
+/* Scrollbar follows the theme (dark keeps the original chocolate track). */
 ::-webkit-scrollbar {
   width: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #150c07;
+  background: #f0e2c8;
 }
 ::-webkit-scrollbar-thumb {
-  background: #4a2818;
+  background: #c9a86a;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
+  background: #8b5a2b;
+}
+.dark ::-webkit-scrollbar-track {
+  background: #150c07;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #4a2818;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
   background: #8b5a2b;
 }
 
@@ -51,12 +94,22 @@
 }
 
 /* Auth inputs: stop Chrome autofill from painting fields white/light-blue.
-   Keeps the dark chocolate surface with light text in every state. */
+   Dark keeps the chocolate surface with light text; light uses the
+   warm-white surface with espresso text. */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 60px #120a06 inset;
+  -webkit-text-fill-color: #fcf8f2;
+  caret-color: #fcf8f2;
+}
+
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 60px #120a06 inset;
-  -webkit-text-fill-color: #fcf8f2;
-  caret-color: #fcf8f2;
+  -webkit-box-shadow: 0 0 0 60px #ffffff inset;
+  -webkit-text-fill-color: #2b1a12;
+  caret-color: #2b1a12;
 }

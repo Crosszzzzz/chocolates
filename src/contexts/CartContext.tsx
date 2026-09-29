@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { CartLine } from '../types/chocolate';
-import { mergeCarts } from '../../api/cart';
+import { addLineToCart, mergeCarts } from '../lib/cart';
 
 // M11 server cart: localStorage stays as the offline cache/fallback and the
 // guest (logged-out) flow is untouched — no network happens until the app
@@ -147,13 +147,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     warning,
     isSyncing,
     add: (sku, stock) => {
-      if (stock <= 0) { setWarning('Sin stock'); return }
-      setWarning(null);
       setLines((prev) => {
-        const found = prev.find((l) => l.sku === sku);
-        if (!found) return [...prev, { sku, qty: 1 }];
-        if (found.qty >= stock) { setWarning(`Solo quedan ${stock} unidades`); return prev }
-        return prev.map((l) => (l.sku === sku ? { ...l, qty: l.qty + 1 } : l));
+        const { lines: next, warning: w } = addLineToCart(prev, sku, stock);
+        setWarning(w);
+        return next;
       });
     },
     remove: (sku) => setLines((prev) => prev.filter((l) => l.sku !== sku)),

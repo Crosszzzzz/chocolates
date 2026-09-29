@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, ArrowRight, BookOpen, Quote, Sparkles, ChevronLeft, Volume2 } from 'lucide-react';
+import { ChevronDown, ArrowRight, Quote, ChevronLeft } from 'lucide-react';
 import { ChocolateFactory, HistoryMilestone } from '../types/chocolate';
 import { playPedestalHum } from '../utils/audio';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface HeritageCorridorViewProps {
   factory: ChocolateFactory;
@@ -29,6 +30,12 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
   const doorLeftRef = useRef<THREE.Mesh | null>(null);
   const doorRightRef = useRef<THREE.Mesh | null>(null);
   const sconcesRef = useRef<THREE.PointLight[]>([]);
+
+  const { theme } = useTheme();
+
+  // Live theme handles (populated by the setup effect, read by [theme]).
+  const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
+  const hemisphereLightRef = useRef<THREE.HemisphereLight | null>(null);
 
   // Smooth scroll target
   const targetZ = useRef<number>(5);
@@ -126,7 +133,7 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
     // 1. Scene Setup
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    scene.fog = new THREE.FogExp2(0x150b07, 0.035);
+    scene.fog = new THREE.FogExp2(0x2a160d, 0.022);
 
     // 2. Camera Setup
     const camera = new THREE.PerspectiveCamera(
@@ -143,12 +150,19 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
-    // 4. Lights
-    const ambientLight = new THREE.AmbientLight(0x4a2a18, 1.2);
+    // 4. Lights (warm premium night: lifted base so corridor reads like islands)
+    const ambientLight = new THREE.AmbientLight(0x9a6a45, 2.0);
     scene.add(ambientLight);
+    ambientLightRef.current = ambientLight;
+
+    const hemisphereLight = new THREE.HemisphereLight(0xffe0b3, 0x2a140a, 0.7);
+    scene.add(hemisphereLight);
+    hemisphereLightRef.current = hemisphereLight;
 
     // 5. Corridor Geometry Construction
     const corridorWidth = 6.2;
@@ -205,7 +219,7 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
     const sconces: THREE.PointLight[] = [];
     for (let zPos = 4; zPos > -corridorLength + 8; zPos -= 7.5) {
       // Left sconce
-      const lightLeft = new THREE.PointLight(0xffb84d, 1.8, 9);
+      const lightLeft = new THREE.PointLight(0xffb84d, 3.0, 14);
       lightLeft.position.set(-corridorWidth / 2 + 0.4, 2.7, zPos);
       scene.add(lightLeft);
       sconces.push(lightLeft);
@@ -218,7 +232,7 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
       scene.add(lampLeft);
 
       // Right sconce
-      const lightRight = new THREE.PointLight(0xffb84d, 1.8, 9);
+      const lightRight = new THREE.PointLight(0xffb84d, 3.0, 14);
       lightRight.position.set(corridorWidth / 2 - 0.4, 2.7, zPos);
       scene.add(lightRight);
       sconces.push(lightRight);
@@ -275,7 +289,7 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
       scene.add(frameMesh);
 
       // Dedicated spotlight on the painting
-      const spot = new THREE.SpotLight(0xfff3c4, 2.5, 8, Math.PI / 5, 0.4);
+      const spot = new THREE.SpotLight(0xfff3c4, 3.5, 12, Math.PI / 5, 0.4);
       spot.position.set(0, 3.8, zDistance);
       spot.target = frameMesh;
       scene.add(spot);
@@ -316,7 +330,7 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
     doorRightRef.current = doorRight;
 
     // Golden Radiant Light pouring from behind the door
-    const vaultLight = new THREE.PointLight(0xffd700, 5, 25);
+    const vaultLight = new THREE.PointLight(0xffd700, 6, 30);
     vaultLight.position.set(0, 2, doorZ - 3);
     scene.add(vaultLight);
 
@@ -381,7 +395,7 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
 
       // Subtle light flicker in sconces
       sconces.forEach((light, i) => {
-        light.intensity = 1.8 + Math.sin(elapsed * 4 + i) * 0.25;
+        light.intensity = 3.0 + Math.sin(elapsed * 4 + i) * 0.35;
       });
 
       // Calculate progress (0% to 100%)
@@ -451,6 +465,30 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
     };
   }, [factory]);
 
+  // Live theme sync (no scene rebuild): fog, clear color, exposure and base
+  // lights follow the global theme. Dark restores the original night values.
+  // Note: this renderer is opaque (alpha: false), so light mode also needs
+  // an explicit cream scene background instead of the default black clear.
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const renderer = rendererRef.current;
+    if (!scene || !renderer) return;
+    const light = theme === 'light';
+    if (scene.fog instanceof THREE.FogExp2) {
+      scene.fog.color.set(light ? 0xf0e2c8 : 0x2a160d);
+    }
+    scene.background = light ? new THREE.Color(0xf5ead6) : null;
+    renderer.toneMappingExposure = light ? 1.0 : 1.15;
+    if (ambientLightRef.current) {
+      ambientLightRef.current.color.set(light ? 0xfff2e0 : 0x9a6a45);
+      ambientLightRef.current.intensity = light ? 2.2 : 2.0;
+    }
+    if (hemisphereLightRef.current) {
+      hemisphereLightRef.current.color.set(light ? 0xfff6e6 : 0xffe0b3);
+      hemisphereLightRef.current.groundColor.set(light ? 0xd9c49a : 0x2a140a);
+    }
+  }, [theme]);
+
   // Jump to next or previous milestone
   const navigateMilestone = (direction: 'next' | 'prev') => {
     playPedestalHum();
@@ -471,27 +509,13 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-[#150b07] select-none">
+    <div className="relative w-full h-screen overflow-hidden bg-[#faf6ef] dark:bg-[#150b07] select-none">
       
       {/* 3D Canvas Mount */}
       <div ref={containerRef} className="absolute inset-0 cursor-ns-resize" />
 
       {/* Atmospheric vignette */}
-      <div className="absolute inset-0 pointer-events-none bg-radial-[at_50%_50%] from-transparent via-[#140a05]/30 to-[#0c0502]/85" />
-
-      {/* Corridor Top Title Banner */}
-      <div className="absolute top-20 left-0 right-0 z-20 text-center pointer-events-none px-4">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#1c100a]/85 border border-[#d4af37]/40 backdrop-blur-md shadow-xl"
-        >
-          <BookOpen className="w-4 h-4 text-[#d4af37]" />
-          <span className="text-xs uppercase font-bold tracking-widest text-[#e5c158]">
-            Pasillo Histórico 3D • {factory.name}
-          </span>
-        </motion.div>
-      </div>
+      <div className="absolute inset-0 pointer-events-none bg-radial-[at_50%_50%] from-transparent via-[#d9c49a]/20 dark:via-[#140a05]/20 to-[#c9a86a]/30 dark:to-[#0c0502]/65" />
 
       {/* Active Milestone Archival Focus HUD Card */}
       <div className="absolute top-36 left-6 z-20 max-w-sm hidden md:block pointer-events-auto">
@@ -502,27 +526,27 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.3 }}
-            className="bg-[#1c100a]/90 backdrop-blur-xl border border-[#d4af37]/35 rounded-2xl p-5 shadow-2xl shadow-black/80"
+            className="bg-[#fffdf8]/90 dark:bg-[#1c100a]/90 backdrop-blur-xl border border-[#d4af37]/35 rounded-2xl p-5 shadow-2xl shadow-black/80"
           >
             <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#d4af37]/20 text-[#f1c40f] border border-[#d4af37]/40">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#d4af37]/20 text-[#8a6216] dark:text-[#f1c40f] border border-[#d4af37]/40">
                 {factory.historyMilestones[currentMilestoneIndex]?.year}
               </span>
-              <span className="text-[11px] text-[#bda393] uppercase tracking-wider font-semibold">
+              <span className="text-[11px] text-[#7a5c48] dark:text-[#bda393] uppercase tracking-wider font-semibold">
                 Hito {currentMilestoneIndex + 1} de {factory.historyMilestones.length}
               </span>
             </div>
 
-            <h4 className="text-lg font-bold text-[#fcf8f2] font-serif-luxury leading-tight mb-2">
+            <h4 className="text-lg font-bold text-[#2b1a12] dark:text-[#fcf8f2] font-serif-luxury leading-tight mb-2">
               {factory.historyMilestones[currentMilestoneIndex]?.title}
             </h4>
 
-            <p className="text-xs text-[#d7c4b7] leading-relaxed mb-3">
+            <p className="text-xs text-[#5c4433] dark:text-[#d7c4b7] leading-relaxed mb-3">
               {factory.historyMilestones[currentMilestoneIndex]?.description}
             </p>
 
             {factory.historyMilestones[currentMilestoneIndex]?.quote && (
-              <div className="p-2.5 rounded-xl bg-[#2e1910] border-l-2 border-[#d4af37] text-xs text-[#e5c158] italic font-serif-luxury flex items-start gap-2">
+              <div className="p-2.5 rounded-xl bg-[#efe0c6] dark:bg-[#2e1910] border-l-2 border-[#d4af37] text-xs text-[#8a6216] dark:text-[#e5c158] italic font-serif-luxury flex items-start gap-2">
                 <Quote className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-[#d4af37]" />
                 <span>{factory.historyMilestones[currentMilestoneIndex]?.quote}</span>
               </div>
@@ -531,33 +555,33 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
         </AnimatePresence>
       </div>
 
-      {/* Floating Scroll Guide at Bottom Center */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center pointer-events-auto">
-        
-        {scrollProgress < 0.85 ? (
+      {/* Floating Scroll Guide at Bottom Center + fixed chamber entry */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 pointer-events-auto">
+
+        {scrollProgress < 0.85 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center gap-2 bg-[#1c100a]/85 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-[#d4af37]/30 shadow-xl"
+            className="flex flex-col items-center gap-2 bg-[#fffdf8]/85 dark:bg-[#1c100a]/85 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-[#d4af37]/30 shadow-xl"
           >
             <div className="flex items-center gap-3">
               <button
                 onClick={() => navigateMilestone('prev')}
                 disabled={currentMilestoneIndex === 0}
-                className="p-1.5 rounded-lg bg-[#2e1910] hover:bg-[#3d2215] text-[#d4af37] disabled:opacity-40 cursor-pointer"
+                className="p-1.5 rounded-lg bg-[#efe0c6] dark:bg-[#2e1910] hover:bg-[#e2cda4] hover:dark:bg-[#3d2215] text-[#d4af37] disabled:opacity-40 cursor-pointer"
                 title="Hito anterior"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
               <div className="text-center">
-                <span className="text-xs font-semibold text-[#fcf8f2] flex items-center gap-1.5 justify-center">
+                <span className="text-xs font-semibold text-[#2b1a12] dark:text-[#fcf8f2] flex items-center gap-1.5 justify-center">
                   <span>Desliza para caminar por el pasillo</span>
                   <ChevronDown className="w-3.5 h-3.5 text-[#d4af37] animate-bounce" />
                 </span>
-                <div className="w-48 h-1.5 bg-[#3a1d12] rounded-full mt-1.5 overflow-hidden">
+                <div className="w-48 h-1.5 bg-[#efe0c6] dark:bg-[#3a1d12] rounded-full mt-1.5 overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-[#d4af37] to-[#e5c158] transition-all duration-150"
+                    className="h-full bg-gradient-to-r from-[#d4af37] to-[#8a6216] dark:to-[#e5c158] transition-all duration-150"
                     style={{ width: `${Math.round(scrollProgress * 100)}%` }}
                   />
                 </div>
@@ -565,7 +589,7 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
 
               <button
                 onClick={() => navigateMilestone('next')}
-                className="p-1.5 rounded-lg bg-[#2e1910] hover:bg-[#3d2215] text-[#d4af37] cursor-pointer"
+                className="p-1.5 rounded-lg bg-[#efe0c6] dark:bg-[#2e1910] hover:bg-[#e2cda4] hover:dark:bg-[#3d2215] text-[#d4af37] cursor-pointer"
                 title="Siguiente hito"
               >
                 <ArrowRight className="w-4 h-4" />
@@ -574,46 +598,34 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
 
             <button
               onClick={jumpToVault}
-              className="text-[11px] text-[#e5c158] hover:underline cursor-pointer flex items-center gap-1"
+              className="text-[11px] text-[#8a6216] dark:text-[#e5c158] hover:underline cursor-pointer flex items-center gap-1"
             >
               <span>Avanzar directo al final del pasillo</span>
               <ArrowRight className="w-3 h-3" />
             </button>
           </motion.div>
-        ) : (
-          /* When user arrives at the end of corridor */
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="flex flex-col items-center gap-3 bg-[#1c100a]/95 backdrop-blur-xl px-8 py-4 rounded-2xl border-2 border-[#d4af37] shadow-2xl shadow-[#d4af37]/30"
-          >
-            <div className="flex items-center gap-2 text-[#f1c40f]">
-              <Sparkles className="w-5 h-5 animate-spin" />
-              <span className="text-sm font-bold uppercase tracking-wider font-royal">
-                ¡Puertas de la Sala Real Abiertas!
-              </span>
-            </div>
-
-            <button
-              onClick={onEnterChamber}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f1c40f] to-[#b8860b] text-[#1a0f08] font-extrabold text-sm flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-[#d4af37]/40 cursor-pointer"
-            >
-              <span>Ingresar a la Sala Real de Productos</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </motion.div>
         )}
+
+        {/* Fixed entry to the product chamber, always visible */}
+        <button
+          onClick={onEnterChamber}
+          className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#8a6216] dark:via-[#f1c40f] to-[#b8860b] text-[#1a0f08] font-extrabold text-sm flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-[#d4af37]/40 cursor-pointer"
+        >
+          <span>Ingresar a la Sala Real de Productos</span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
 
       </div>
 
-      {/* Return Button to Floating Islands */}
+      {/* Back button to the floating islands (icon only) */}
       <div className="absolute top-20 left-6 z-20 hidden sm:block pointer-events-auto">
         <button
           onClick={onReturnToArchipelago}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1c100a]/80 backdrop-blur-md text-xs text-[#e5c158] hover:text-[#fff] hover:bg-[#2b170e] border border-[#d4af37]/25 transition-all cursor-pointer"
+          aria-label="Back to archipelago"
+          title="Back to archipelago"
+          className="flex items-center justify-center w-10 h-10 rounded-full bg-[#fffdf8]/80 dark:bg-[#1c100a]/80 backdrop-blur-md text-[#8a6216] dark:text-[#e5c158] hover:text-[#2b1a12] hover:dark:text-[#fff] hover:bg-[#f3e7d3] hover:dark:bg-[#2b170e] border border-[#d4af37]/25 transition-all cursor-pointer"
         >
-          <ChevronLeft className="w-4 h-4" />
-          <span>Volver al Archipiélago</span>
+          <ChevronLeft className="w-5 h-5" />
         </button>
       </div>
 

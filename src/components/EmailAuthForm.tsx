@@ -30,7 +30,7 @@ export const EmailAuthForm: React.FC<{ onDone?: () => void }> = ({ onDone }) => 
 
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-2" aria-label={mode === 'signin' ? 'Iniciar sesión con correo' : 'Crear cuenta con correo'}>
-      <label className="flex items-center gap-2 rounded-xl bg-[#120a06] border border-[#d4af37]/20 px-3 focus-within:border-[#d4af37]/60">
+      <label className="flex items-center gap-2 rounded-xl bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/20 px-3 focus-within:border-[#d4af37]/60">
         <Mail className="w-4 h-4 text-[#8a7265] shrink-0" />
         <span className="sr-only">Correo electrónico</span>
         <input
@@ -41,10 +41,10 @@ export const EmailAuthForm: React.FC<{ onDone?: () => void }> = ({ onDone }) => 
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Correo electrónico"
           aria-label="Correo electrónico"
-          className="w-full min-h-[44px] bg-transparent text-xs text-[#fcf8f2] placeholder:text-[#8a7265] focus:outline-none"
+          className="w-full min-h-[44px] bg-transparent text-xs text-[#2b1a12] dark:text-[#fcf8f2] placeholder:text-[#8a7265] focus:outline-none"
         />
       </label>
-      <label className="flex items-center gap-2 rounded-xl bg-[#120a06] border border-[#d4af37]/20 px-3 focus-within:border-[#d4af37]/60">
+      <label className="flex items-center gap-2 rounded-xl bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/20 px-3 focus-within:border-[#d4af37]/60">
         <Lock className="w-4 h-4 text-[#8a7265] shrink-0" />
         <span className="sr-only">Contraseña</span>
         <input
@@ -56,16 +56,23 @@ export const EmailAuthForm: React.FC<{ onDone?: () => void }> = ({ onDone }) => 
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Contraseña (mínimo 6 caracteres)"
           aria-label="Contraseña"
-          className="w-full min-h-[44px] bg-transparent text-xs text-[#fcf8f2] placeholder:text-[#8a7265] focus:outline-none"
+          className="w-full min-h-[44px] bg-transparent text-xs text-[#2b1a12] dark:text-[#fcf8f2] placeholder:text-[#8a7265] focus:outline-none"
         />
       </label>
-      {localError !== null && (
-        <p role="alert" className="text-[11px] text-[#f0a6a6]">{localError}</p>
-      )}
+      {/* Reserved error slot: always mounted with fixed min-height so showing
+          or hiding the message never changes the dropdown size or position. */}
+      <p
+        role={localError === null ? undefined : 'alert'}
+        aria-live="polite"
+        aria-hidden={localError === null}
+        className={`min-h-4 text-[11px] leading-4 break-words text-[#b3261e] dark:text-[#f0a6a6] ${localError === null ? 'invisible' : 'visible'}`}
+      >
+        {localError ?? ' '}
+      </p>
       <button
         type="submit"
         disabled={busy}
-        className="min-h-[44px] rounded-xl bg-[#d4af37] text-[#1a0f08] text-xs font-bold hover:bg-[#e5c158] transition-colors disabled:opacity-60 cursor-pointer flex items-center justify-center gap-1.5"
+        className="min-h-[44px] rounded-xl bg-[#d4af37] text-[#1a0f08] text-xs font-bold hover:bg-[#8a6216] hover:dark:bg-[#e5c158] transition-colors disabled:opacity-60 cursor-pointer flex items-center justify-center gap-1.5"
       >
         {mode === 'signin' ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
         {busy ? 'Cargando…' : mode === 'signin' ? 'Entrar con correo' : 'Crear cuenta'}
@@ -73,7 +80,7 @@ export const EmailAuthForm: React.FC<{ onDone?: () => void }> = ({ onDone }) => 
       <button
         type="button"
         onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setLocalError(null) }}
-        className="text-[11px] text-[#bda393] hover:text-[#e5c158] underline underline-offset-2 cursor-pointer py-1"
+        className="text-[11px] text-[#7a5c48] dark:text-[#bda393] hover:text-[#8a6216] hover:dark:text-[#e5c158] underline underline-offset-2 cursor-pointer py-1"
       >
         {mode === 'signin' ? '¿Sin cuenta? Crea una aquí' : '¿Ya tienes cuenta? Inicia sesión'}
       </button>

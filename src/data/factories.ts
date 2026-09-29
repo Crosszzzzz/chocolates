@@ -115,7 +115,7 @@ export const FACTORIES: ChocolateFactory[] = [
     islandColor: '#2980b9',
     brandColor: '#1a365d',
     accentColor: '#38bdf8',
-    islandPosition: [-3.8, 0.9, -1],
+    islandPosition: [-3.8, 0.4, -1],
     historyMilestones: [
       {
         year: '1780',
@@ -209,7 +209,7 @@ export const FACTORIES: ChocolateFactory[] = [
     islandColor: '#e67e22',
     brandColor: '#b45309',
     accentColor: '#fbbf24',
-    islandPosition: [3.8, -0.3, -1],
+    islandPosition: [3.8, 0.4, -1],
     historyMilestones: [
       {
         year: '1948',
@@ -306,13 +306,17 @@ export function toCommerce(p: ProductSpec): CommerceProduct {
   return { ...p, sku: p.id, priceBOB: f.priceBOB, stock: f.stock };
 }
 export interface CatalogEntry { sku: string; nameEs: string; priceBOB: number; stock: number }
+// Bound every catalog fetch: a hung /api/* must never stall the UI.
+const CATALOG_TIMEOUT_MS = 4000;
 export async function fetchCatalog(): Promise<{ entries: CatalogEntry[]; fromDb: boolean }> {
   const fallback = FACTORIES.flatMap((f) => f.products.map((p) => {
     const c = toCommerce(p);
     return { sku: c.sku, nameEs: p.name, priceBOB: c.priceBOB, stock: c.stock } as CatalogEntry;
   }));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CATALOG_TIMEOUT_MS);
   try {
-    const res = await fetch('/api/products');
+    const res = await fetch('/api/products', { signal: controller.signal });
     if (!res.ok) throw new Error('db-down');
     const data = (await res.json()) as { products?: CatalogEntry[] };
     if (!Array.isArray(data.products)) throw new Error('bad-shape');
@@ -320,5 +324,7 @@ export async function fetchCatalog(): Promise<{ entries: CatalogEntry[]; fromDb:
   } catch {
     console.error('No se pudo cargar el catálogo, usando datos locales');
     return { entries: fallback, fromDb: false };
+  } finally {
+    clearTimeout(timer);
   }
 }

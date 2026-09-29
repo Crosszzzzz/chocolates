@@ -33,8 +33,19 @@ function readStored(): StoredSession | null {
 function writeStored(session: StoredSession): void {
   window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
+// Bound every auth fetch: a hung identity endpoint must never stall the UI.
+const AUTH_TIMEOUT_MS = 8000;
+async function fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AUTH_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 async function fetchUser(accessToken: string): Promise<{ id: string; email: string | null }> {
-  const res = await fetch(`${getSupabaseUrl()}/auth/v1/user`, { headers: { apikey: getSupabaseAnonKey(), Authorization: `Bearer ${accessToken}` } });
+  const res = await fetchWithTimeout(`${getSupabaseUrl()}/auth/v1/user`, { headers: { apikey: getSupabaseAnonKey(), Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) throw new Error('No se pudo iniciar sesión con Google');
   const data = (await res.json()) as { id: string; email?: string | null };
   return { id: data.id, email: data.email ?? null };
@@ -42,7 +53,7 @@ async function fetchUser(accessToken: string): Promise<{ id: string; email: stri
 /** Role lookup via /api/me (service_role). Never throws: defaults to turista. */
 async function fetchRole(userId: string): Promise<{ email: string | null; role: UserRole }> {
   try {
-    const res = await fetch('/api/me', {
+    const res = await fetchWithTimeout('/api/me', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId }),

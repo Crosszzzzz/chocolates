@@ -21,6 +21,7 @@ import { useCart } from '../contexts/CartContext';
 import { toCommerce } from '../data/factories';
 import { ProductReviews } from './ProductReviews';
 import { playFoilTearSound, playChocolateSnapSound } from '../utils/audio';
+import { useTheme } from '../contexts/ThemeContext';
 import {
   type WrapState,
   nextWrapState,
@@ -132,6 +133,14 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const animationFrameId = useRef<number | null>(null);
+
+  const { theme } = useTheme();
+
+  // Live theme handles: showcase lights only (product materials are brand
+  // truth and never change with the theme).
+  const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
+  const keyLightRef = useRef<THREE.DirectionalLight | null>(null);
+  const rimLightRef = useRef<THREE.DirectionalLight | null>(null);
 
   const chocolateBarGroupRef = useRef<THREE.Group | null>(null);
   const wrapperPiecesRef = useRef<WrapperPiece[]>([]);
@@ -245,11 +254,13 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
     // 4. Lighting for ultra-glossy realistic chocolate bar
     const ambient = new THREE.AmbientLight(0xffeedd, 0.9);
     scene.add(ambient);
+    ambientLightRef.current = ambient;
 
     const keyLight = new THREE.DirectionalLight(0xfffaed, 2.4);
     keyLight.position.set(3, 5, 4);
     keyLight.castShadow = true;
     scene.add(keyLight);
+    keyLightRef.current = keyLight;
 
     const fillLight = new THREE.DirectionalLight(0xedd8be, 1.2);
     fillLight.position.set(-4, -2, 3);
@@ -258,6 +269,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
     const rimLight = new THREE.DirectionalLight(0xd4af37, 2.0);
     rimLight.position.set(0, 4, -4);
     scene.add(rimLight);
+    rimLightRef.current = rimLight;
 
     // 5. Build Chocolate Bar Group
     const barGroup = new THREE.Group();
@@ -563,6 +575,25 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
     };
   }, [product, factory]);
 
+  // Live theme sync (no scene rebuild): neutral showcase wash in light mode,
+  // original warm gloss in dark. Product materials stay untouched.
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const light = theme === 'light';
+    if (ambientLightRef.current) {
+      ambientLightRef.current.color.set(light ? 0xfff8ee : 0xffeedd);
+      ambientLightRef.current.intensity = light ? 1.05 : 0.9;
+    }
+    if (keyLightRef.current) {
+      keyLightRef.current.intensity = light ? 2.1 : 2.4;
+    }
+    if (rimLightRef.current) {
+      rimLightRef.current.color.set(light ? 0xc9962e : 0xd4af37);
+      rimLightRef.current.intensity = light ? 1.4 : 2.0;
+    }
+  }, [theme]);
+
   // Tear all wrapper pieces automatically
   const tearAll = () => {
     const pieces = wrapperPiecesRef.current;
@@ -639,7 +670,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-gradient-to-b from-[#180b06] via-[#1f0e08] to-[#0d0503] select-none flex flex-col md:flex-row">
+    <div className="relative w-full h-screen overflow-hidden bg-gradient-to-b from-[#faf6ef] dark:from-[#180b06] via-[#f5ead6] dark:via-[#1f0e08] to-[#eeddc0] dark:to-[#0d0503] select-none flex flex-col md:flex-row">
       
       {/* 3D Canvas Area */}
       <div className="relative flex-1 h-full w-full">
@@ -654,7 +685,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
         <div className="absolute top-20 left-6 right-6 z-20 flex items-center justify-between pointer-events-none">
           <button
             onClick={onBackToChamber}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#1c100a]/90 backdrop-blur-md text-xs text-[#e5c158] hover:text-[#fff] hover:bg-[#2b170e] border border-[#d4af37]/30 transition-all pointer-events-auto cursor-pointer shadow-lg"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#fffdf8]/90 dark:bg-[#1c100a]/90 backdrop-blur-md text-xs text-[#8a6216] dark:text-[#e5c158] hover:text-[#2b1a12] hover:dark:text-[#fff] hover:bg-[#f3e7d3] hover:dark:bg-[#2b170e] border border-[#d4af37]/30 transition-all pointer-events-auto cursor-pointer shadow-lg"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Volver a la Sala Real</span>
@@ -664,14 +695,14 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
           <div className="pointer-events-auto">
             {!isFullyUnwrapped ? (
               wrapState === 'peeking' ? (
-                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1c100a]/90 border border-[#f1c40f]/50 text-xs text-[#f1c40f] backdrop-blur-md shadow-lg">
-                  <Layers className="w-3.5 h-3.5 animate-pulse text-[#f1c40f]" />
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#fffdf8]/90 dark:bg-[#1c100a]/90 border border-[#8a6216]/50 dark:border-[#f1c40f]/50 text-xs text-[#8a6216] dark:text-[#f1c40f] backdrop-blur-md shadow-lg">
+                  <Layers className="w-3.5 h-3.5 animate-pulse text-[#8a6216] dark:text-[#f1c40f]" />
                   <span className="font-semibold">
                     Entreabierto · 50% — desliza para terminar de desenvolver
                   </span>
                 </div>
               ) : (
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1c100a]/90 border border-[#d4af37]/40 text-xs text-[#f1c40f] backdrop-blur-md shadow-lg">
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#fffdf8]/90 dark:bg-[#1c100a]/90 border border-[#d4af37]/40 text-xs text-[#8a6216] dark:text-[#f1c40f] backdrop-blur-md shadow-lg">
                 <Scissors className="w-3.5 h-3.5 animate-pulse text-[#d4af37]" />
                 <span className="font-semibold">
                   {unwrapProgress === 0
@@ -681,7 +712,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
               </div>
               )
             ) : (
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1c100a]/90 border border-[#22c55e]/40 text-xs text-[#4ade80] backdrop-blur-md shadow-lg">
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#fffdf8]/90 dark:bg-[#1c100a]/90 border border-[#22c55e]/40 text-xs text-[#4ade80] backdrop-blur-md shadow-lg">
                 <Rotate3d className="w-3.5 h-3.5 animate-spin" />
                 <span className="font-semibold">¡Desenvuelta! Arrastra con el ratón para rotar 360°</span>
               </div>
@@ -694,7 +725,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
           {!isFullyUnwrapped ? (
             <button
               onClick={tearAll}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2e1910] hover:bg-[#3d2215] text-xs font-bold text-[#e5c158] border border-[#d4af37]/30 shadow-xl transition-all cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#efe0c6] dark:bg-[#2e1910] hover:bg-[#e2cda4] hover:dark:bg-[#3d2215] text-xs font-bold text-[#8a6216] dark:text-[#e5c158] border border-[#d4af37]/30 shadow-xl transition-all cursor-pointer"
             >
               <Scissors className="w-3.5 h-3.5" />
               <span>Rasgar Envoltorio Rápido</span>
@@ -702,7 +733,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
           ) : (
             <button
               onClick={rewrapPieces}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2e1910] hover:bg-[#3d2215] text-xs font-bold text-[#e5c158] border border-[#d4af37]/30 shadow-xl transition-all cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#efe0c6] dark:bg-[#2e1910] hover:bg-[#e2cda4] hover:dark:bg-[#3d2215] text-xs font-bold text-[#8a6216] dark:text-[#e5c158] border border-[#d4af37]/30 shadow-xl transition-all cursor-pointer"
               title="Volver a envolver la tableta de chocolate"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -712,14 +743,14 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
 
           <button
             onClick={advanceWrapState}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1c100a]/90 hover:bg-[#2b170e] text-xs font-bold text-[#f1c40f] border border-[#f1c40f]/30 shadow-xl transition-all cursor-pointer backdrop-blur-md"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#fffdf8]/90 dark:bg-[#1c100a]/90 hover:bg-[#f3e7d3] hover:dark:bg-[#2b170e] text-xs font-bold text-[#8a6216] dark:text-[#f1c40f] border border-[#8a6216]/30 dark:border-[#f1c40f]/30 shadow-xl transition-all cursor-pointer backdrop-blur-md"
             title="Avanzar al siguiente estado del envoltorio (envuelto → entreabierto → desenvuelto)"
           >
             <Package className="w-3.5 h-3.5" />
             <span>Siguiente: {NEXT_LABEL[nextWrapState(wrapState)]}</span>
           </button>
 
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1c100a]/80 text-[11px] text-[#a08575] border border-[#d4af37]/15 backdrop-blur-sm">
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#fffdf8]/80 dark:bg-[#1c100a]/80 text-[11px] text-[#7a5c48] dark:text-[#a08575] border border-[#d4af37]/15 backdrop-blur-sm">
             <span>Usa la rueda del ratón hacia atrás para re-envolver</span>
           </div>
         </div>
@@ -731,7 +762,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
         initial={{ opacity: 0, x: 50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full md:w-[420px] lg:w-[460px] h-auto md:h-full bg-[#180c07]/95 backdrop-blur-2xl border-t md:border-t-0 md:border-l border-[#d4af37]/30 p-6 md:p-8 flex flex-col justify-between overflow-y-auto z-20 shadow-2xl shadow-black"
+        className="w-full md:w-[420px] lg:w-[460px] h-auto md:h-full bg-[#fffdf8]/95 dark:bg-[#180c07]/95 backdrop-blur-2xl border-t md:border-t-0 md:border-l border-[#d4af37]/30 p-6 md:p-8 flex flex-col justify-between overflow-y-auto z-20 shadow-2xl shadow-black"
       >
         <div>
           {/* Badge & Factory */}
@@ -740,56 +771,56 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
               <Sparkles className="w-3.5 h-3.5" />
               {factory.name}
             </span>
-            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#f1c40f] border border-[#d4af37]/30">
+            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#8a6216] dark:text-[#f1c40f] border border-[#d4af37]/30">
               {product.badge || 'Edición Suprema'}
             </span>
           </div>
 
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#fcf8f2] font-serif-luxury leading-tight mb-1">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#2b1a12] dark:text-[#fcf8f2] font-serif-luxury leading-tight mb-1">
             {product.name}
           </h2>
 
-          <p className="text-xs text-[#bda393] italic font-serif-luxury mb-4">
+          <p className="text-xs text-[#7a5c48] dark:text-[#bda393] italic font-serif-luxury mb-4">
             {product.subtitle}
           </p>
 
           {/* Description */}
-          <p className="text-xs text-[#d7c4b7] leading-relaxed mb-5">
+          <p className="text-xs text-[#5c4433] dark:text-[#d7c4b7] leading-relaxed mb-5">
             {product.description}
           </p>
 
           {/* Technical Specs Grid */}
           <div className="grid grid-cols-2 gap-2.5 mb-5">
-            <div className="p-3 rounded-xl bg-[#25130b] border border-[#d4af37]/20">
-              <div className="flex items-center gap-1.5 text-[#bda393] text-[11px] mb-1">
+            <div className="p-3 rounded-xl bg-[#ffffff] dark:bg-[#25130b] border border-[#d4af37]/20">
+              <div className="flex items-center gap-1.5 text-[#7a5c48] dark:text-[#bda393] text-[11px] mb-1">
                 <Scale className="w-3.5 h-3.5 text-[#d4af37]" />
                 <span>Peso Neto</span>
               </div>
-              <span className="text-sm font-bold text-[#fcf8f2]">{product.weight}</span>
+              <span className="text-sm font-bold text-[#2b1a12] dark:text-[#fcf8f2]">{product.weight}</span>
             </div>
 
-            <div className="p-3 rounded-xl bg-[#25130b] border border-[#d4af37]/20">
-              <div className="flex items-center gap-1.5 text-[#bda393] text-[11px] mb-1">
+            <div className="p-3 rounded-xl bg-[#ffffff] dark:bg-[#25130b] border border-[#d4af37]/20">
+              <div className="flex items-center gap-1.5 text-[#7a5c48] dark:text-[#bda393] text-[11px] mb-1">
                 <Maximize2 className="w-3.5 h-3.5 text-[#d4af37]" />
                 <span>Dimensiones</span>
               </div>
-              <span className="text-sm font-bold text-[#fcf8f2]">{product.dimensions}</span>
+              <span className="text-sm font-bold text-[#2b1a12] dark:text-[#fcf8f2]">{product.dimensions}</span>
             </div>
 
-            <div className="p-3 rounded-xl bg-[#25130b] border border-[#d4af37]/20">
-              <div className="flex items-center gap-1.5 text-[#bda393] text-[11px] mb-1">
+            <div className="p-3 rounded-xl bg-[#ffffff] dark:bg-[#25130b] border border-[#d4af37]/20">
+              <div className="flex items-center gap-1.5 text-[#7a5c48] dark:text-[#bda393] text-[11px] mb-1">
                 <Layers className="w-3.5 h-3.5 text-[#d4af37]" />
                 <span>Pureza de Cacao</span>
               </div>
-              <span className="text-sm font-bold text-[#f1c40f]">{product.cacaoPercentage}% Cacao</span>
+              <span className="text-sm font-bold text-[#8a6216] dark:text-[#f1c40f]">{product.cacaoPercentage}% Cacao</span>
             </div>
 
-            <div className="p-3 rounded-xl bg-[#25130b] border border-[#d4af37]/20">
-              <div className="flex items-center gap-1.5 text-[#bda393] text-[11px] mb-1">
+            <div className="p-3 rounded-xl bg-[#ffffff] dark:bg-[#25130b] border border-[#d4af37]/20">
+              <div className="flex items-center gap-1.5 text-[#7a5c48] dark:text-[#bda393] text-[11px] mb-1">
                 <Package className="w-3.5 h-3.5 text-[#d4af37]" />
                 <span>Terroir de Origen</span>
               </div>
-              <span className="text-xs font-bold text-[#fcf8f2] truncate block">{product.origin}</span>
+              <span className="text-xs font-bold text-[#2b1a12] dark:text-[#fcf8f2] truncate block">{product.origin}</span>
             </div>
           </div>
 
@@ -803,7 +834,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
               {product.flavorProfile.map((f, i) => (
                 <span
                   key={i}
-                  className="text-xs px-3 py-1 rounded-lg bg-[#2e1910] text-[#e6d5c3] border border-[#d4af37]/25 flex items-center gap-1.5"
+                  className="text-xs px-3 py-1 rounded-lg bg-[#efe0c6] dark:bg-[#2e1910] text-[#5c4433] dark:text-[#e6d5c3] border border-[#d4af37]/25 flex items-center gap-1.5"
                 >
                   <CheckCircle2 className="w-3 h-3 text-[#d4af37]" />
                   <span>{f}</span>
@@ -813,8 +844,8 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
           </div>
 
           {/* Recommended Pairing */}
-          <div className="p-3.5 rounded-xl bg-[#2b170e] border-l-2 border-[#d4af37] text-xs text-[#e6d5c3] mb-4">
-            <span className="text-[#f1c40f] font-bold block mb-1">Maridaje Sugerido:</span>
+          <div className="p-3.5 rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] border-l-2 border-[#d4af37] text-xs text-[#5c4433] dark:text-[#e6d5c3] mb-4">
+            <span className="text-[#8a6216] dark:text-[#f1c40f] font-bold block mb-1">Maridaje Sugerido:</span>
             <span>{product.pairing}</span>
           </div>
 
@@ -830,23 +861,23 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
             onClick={() => add(commerce.sku, commerce.stock)}
             disabled={commerce.stock <= 0}
             title={commerce.stock <= 0 ? 'Sin stock' : `Añadir ${product.name} al carrito`}
-            className="w-full min-h-[44px] py-3 rounded-xl bg-[#2e1910] text-[#f1c40f] font-extrabold text-xs uppercase tracking-wider border border-[#d4af37]/40 hover:bg-[#3d2215] active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-center"
+            className="w-full min-h-[44px] py-3 rounded-xl bg-[#efe0c6] dark:bg-[#2e1910] text-[#8a6216] dark:text-[#f1c40f] font-extrabold text-xs uppercase tracking-wider border border-[#d4af37]/40 hover:bg-[#e2cda4] hover:dark:bg-[#3d2215] active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-center"
           >
             {commerce.stock <= 0 ? 'Sin stock' : `Añadir al carrito · Bs ${commerce.priceBOB.toFixed(2)}`}
           </button>
-          {warning && <p role="alert" className="text-[11px] text-[#f0a6a6]">{warning}</p>}
+          {warning && <p role="alert" className="text-[11px] text-[#b3261e] dark:text-[#f0a6a6]">{warning}</p>}
           {onOpenAr && (
             <button
               onClick={onOpenAr}
               aria-label="Ver el producto en realidad aumentada"
-              className="w-full min-h-[44px] py-3 rounded-xl bg-[#2e1910] text-[#f1c40f] font-extrabold text-xs uppercase tracking-wider border border-[#d4af37]/40 hover:bg-[#3d2215] active:scale-[0.98] transition-all cursor-pointer text-center"
+              className="w-full min-h-[44px] py-3 rounded-xl bg-[#efe0c6] dark:bg-[#2e1910] text-[#8a6216] dark:text-[#f1c40f] font-extrabold text-xs uppercase tracking-wider border border-[#d4af37]/40 hover:bg-[#e2cda4] hover:dark:bg-[#3d2215] active:scale-[0.98] transition-all cursor-pointer text-center"
             >
               Ver en realidad aumentada
             </button>
           )}
           <button
             onClick={onBackToChamber}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f1c40f] to-[#b8860b] text-[#1a0f08] font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-[#d4af37]/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer text-center"
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#8a6216] dark:via-[#f1c40f] to-[#b8860b] text-[#1a0f08] font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-[#d4af37]/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer text-center"
           >
             Explorar Otros Productos de {factory.name}
           </button>

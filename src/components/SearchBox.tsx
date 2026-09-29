@@ -66,22 +66,22 @@ export const SearchBox: React.FC<Props> = ({ onPick }) => {
         type="search"
         aria-label="Buscar chocolates"
         placeholder="Buscar chocolate…"
-        className="w-full min-h-[32px] rounded-lg bg-[#120a06]/80 border border-[#d4af37]/25 pl-8 pr-2.5 py-1.5 text-xs text-[#fcf8f2] placeholder:text-[#8a7265] focus:outline-none focus:border-[#d4af37]/60"
+        className="w-full min-h-[32px] rounded-lg bg-[#faf6ef]/80 dark:bg-[#120a06]/80 border border-[#d4af37]/25 pl-8 pr-2.5 py-1.5 text-xs text-[#2b1a12] dark:text-[#fcf8f2] placeholder:text-[#8a7265] focus:outline-none focus:border-[#d4af37]/60"
       />
       {open && (results.length > 0 || showEmpty) && (
         <ul
           role="listbox"
           aria-label="Resultados de búsqueda"
-          className="absolute left-0 right-0 mt-1.5 rounded-xl bg-[#1c100a]/95 border border-[#d4af37]/30 shadow-2xl shadow-black/70 backdrop-blur-xl overflow-hidden z-50"
+          className="absolute left-0 right-0 mt-1.5 rounded-xl bg-[#fffdf8]/95 dark:bg-[#1c100a]/95 border border-[#d4af37]/30 shadow-2xl shadow-black/70 backdrop-blur-xl overflow-hidden z-50"
         >
           {results.map((entry) => (
             <li key={entry.sku} role="option" aria-selected="false">
               <button
                 onClick={() => pick(entry)}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[#2e1910] transition-colors cursor-pointer"
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[#efe0c6] hover:dark:bg-[#2e1910] transition-colors cursor-pointer"
               >
-                <span className="text-xs font-bold text-[#fcf8f2] truncate">{entry.nameEs}</span>
-                <span className="text-[11px] font-extrabold text-[#f1c40f] shrink-0">
+                <span className="text-xs font-bold text-[#2b1a12] dark:text-[#fcf8f2] truncate">{entry.nameEs}</span>
+                <span className="text-[11px] font-extrabold text-[#8a6216] dark:text-[#f1c40f] shrink-0">
                   Bs {entry.priceBOB.toFixed(2)}
                 </span>
               </button>

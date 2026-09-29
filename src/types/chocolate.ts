@@ -49,6 +49,8 @@ export interface ChocolateFactory {
   products: ProductSpec[];
 }
 
+// 'corridor' is a retired phase: kept in the union so saved/stale values still
+// parse, but no UI transition targets it anymore (flow goes diving -> chamber).
 export type RoutePhase = 'archipelago' | 'diving' | 'corridor' | 'chamber' | 'unwrap' | 'ar';
 
 // --- Commerce foundation (PR1, mvp-completo) ---

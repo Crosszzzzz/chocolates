@@ -55,6 +55,30 @@ export function computeModelScale(loadedHeightUnits: number, heightCm: number): 
   return heightCm / 100 / loadedHeightUnits;
 }
 
+/** Longest bounding-box edge of `object`, in its current scene units. */
+export function measureLongestEdge(object: THREE.Object3D): number {
+  const size = new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3());
+  return Math.max(size.x, size.y, size.z);
+}
+
+/**
+ * Uniformly scale `object` so its longest bounding-box edge matches `longestCm`
+ * (real-world cm), then recenter it on its local origin. Used for the scanned
+ * bar models, whose orientation is unknown, so the longest edge (15 cm) is the
+ * safest anchor. Returns 1 (safe no-op) for degenerate input.
+ */
+export function applyRealWorldLongestEdge(object: THREE.Object3D, longestCm: number): number {
+  const native = measureLongestEdge(object);
+  if (!Number.isFinite(native) || native <= 0) return 1;
+  if (!Number.isFinite(longestCm) || longestCm <= 0) return 1;
+  const scale = longestCm / 100 / native;
+  object.scale.multiplyScalar(scale);
+  object.updateWorldMatrix(true, true);
+  const center = new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3());
+  object.position.sub(center);
+  return scale;
+}
+
 /**
  * Uniformly scale `object` so its bounding-box height matches `heightCm`,
  * then recenter it on its local origin so Y-spin staging stays stable.
@@ -107,6 +131,63 @@ export async function loadProductModel(
       }
     });
     return object;
+  } catch {
+    return null;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+export interface LoadedModel {
+  object: THREE.Object3D;
+  /** Uniform scale applied to map the model onto its real-world target size. */
+  scale: number;
+}
+
+export interface LoadModelFromUrlOptions {
+  /** Loader injection for tests; defaults to a real GLTFLoader. */
+  loader?: ProductModelLoader;
+  /** Load timeout budget in ms; defaults to PRODUCT_MODEL_TIMEOUT_MS. */
+  timeoutMs?: number;
+  /**
+   * When set, the model is normalized so its longest bounding-box edge equals
+   * this real-world size in cm. Omit to keep the authored scale (scale = 1).
+   */
+  targetLongestCm?: number;
+}
+
+/**
+ * Load an already-resolved GLB url (percent-encoded URLs are allowed), optionally
+ * normalizing it to a real-world longest edge. Resolves to null on ANY failure
+ * (missing file, parse error, timeout) — never rejects. Used for the shared
+ * scanned models, which live outside the per-sku `/models` convention.
+ */
+export async function loadModelFromUrl(
+  url: string,
+  options: LoadModelFromUrlOptions = {},
+): Promise<LoadedModel | null> {
+  const {
+    loader = new GLTFLoader(),
+    timeoutMs = PRODUCT_MODEL_TIMEOUT_MS,
+    targetLongestCm,
+  } = options;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const loadPromise = loader.loadAsync(url);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`timed out loading ${url}`)), timeoutMs);
+    });
+    const gltf = await Promise.race([loadPromise, timeoutPromise]);
+    const object = gltf?.scene;
+    if (!object) return null;
+    const scale =
+      typeof targetLongestCm === 'number' ? applyRealWorldLongestEdge(object, targetLongestCm) : 1;
+    object.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        (child as THREE.Mesh).castShadow = true;
+      }
+    });
+    return { object, scale };
   } catch {
     return null;
   } finally {

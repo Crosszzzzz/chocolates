@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Sparkles,
   ArrowRight,
   Calendar,
   MapPin,
@@ -17,6 +16,7 @@ import {
   playPedestalHum,
   playIslandSlideSound
 } from '../utils/audio';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface FloatingIslandsViewProps {
   factories: ChocolateFactory[];
@@ -53,6 +53,22 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     }
   });
 
+  // WebGL may be unavailable (blocked GPU, headless, driver crash).
+  // Keep the error in state so we render a navigable fallback, never a black screen.
+  const [webglError, setWebglError] = useState<string | null>(null);
+  // Black-scene guard: a context can exist yet never produce a frame
+  // (dark clear, light/fog misconfig, frozen loop) while webglError stays null.
+  const framesRenderedRef = useRef<number>(0);
+  useEffect(() => {
+    if (webglError !== null) return;
+    const watchdog = setTimeout(() => {
+      if (framesRenderedRef.current === 0) {
+        setWebglError('WebGL produced no frames in time');
+      }
+    }, 3000);
+    return () => clearTimeout(watchdog);
+  }, [webglError]);
+
   const toggleHudCollapsed = useCallback(() => {
     setIsHudCollapsed((prev) => {
       const next = !prev;
@@ -81,6 +97,15 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const islandGroupsRef = useRef<{ [key: string]: THREE.Group }>({});
+
+  const { theme } = useTheme();
+
+  // Live theme handles: fog + key lights follow the global theme without
+  // rebuilding the scene (populated by the setup effect, read by [theme]).
+  const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
+  const sunLightRef = useRef<THREE.DirectionalLight | null>(null);
+  const goldFillRef = useRef<THREE.DirectionalLight | null>(null);
+  const pointLightRef = useRef<THREE.PointLight | null>(null);
 
   const targetCameraPos = useRef(new THREE.Vector3(0, 3.6, 8.6));
   const currentCameraPos = useRef(new THREE.Vector3(0, 3.6, 8.6));
@@ -207,18 +232,47 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     camera.position.copy(currentCameraPos.current);
     cameraRef.current = camera;
 
-    // 3. Renderer Setup
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    rendererRef.current = renderer;
-    container.appendChild(renderer.domElement);
+    // 3. Renderer Setup (may throw when WebGL is unavailable: fall back to 2D UI).
+    // Note: the constructor does not throw on every GPU failure mode (a lost
+    // context can surface later inside the rAF loop, where ErrorBoundary can
+    // never catch it), so the context is verified here and render failures
+    // below also degrade to the 2D fallback instead of a black canvas.
+    let renderer: THREE.WebGLRenderer | null = null;
+    let handleContextLost: ((e: Event) => void) | null = null;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      if (renderer.getContext() === null) {
+        throw new Error('WebGL context unavailable');
+      }
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      rendererRef.current = renderer;
+      container.appendChild(renderer.domElement);
+      handleContextLost = (e: Event): void => {
+        e.preventDefault();
+        if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+        setWebglError('WebGL context lost');
+      };
+      renderer.domElement.addEventListener('webglcontextlost', handleContextLost);
+    } catch (error) {
+      if (renderer !== null) {
+        if (handleContextLost !== null) {
+          renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
+        }
+        renderer.dispose();
+        rendererRef.current = null;
+        renderer = null;
+      }
+      setWebglError(error instanceof Error ? error.message : 'WebGL unavailable');
+      return;
+    }
 
     // 4. Lighting - Rich Warm Chocolate & Gold (bright enough for factories to pop)
     const ambientLight = new THREE.AmbientLight(0xffeedd, 1.05);
     scene.add(ambientLight);
+    ambientLightRef.current = ambientLight;
 
     const mainSun = new THREE.DirectionalLight(0xffdfa9, 2.3);
     mainSun.position.set(6, 12, 8);
@@ -226,14 +280,17 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     mainSun.shadow.mapSize.width = 1024;
     mainSun.shadow.mapSize.height = 1024;
     scene.add(mainSun);
+    sunLightRef.current = mainSun;
 
     const goldFill = new THREE.DirectionalLight(0xd4af37, 1.25);
     goldFill.position.set(-6, -4, -6);
     scene.add(goldFill);
+    goldFillRef.current = goldFill;
 
     const pointLight = new THREE.PointLight(0xffa500, 2.2, 22);
     pointLight.position.set(0, 2, 0);
     scene.add(pointLight);
+    pointLightRef.current = pointLight;
 
     // Helper: Create stylized procedural floating island
     const createIsland = (factory: ChocolateFactory) => {
@@ -241,34 +298,34 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       group.position.set(...factory.islandPosition);
       group.userData = { factoryId: factory.id, factory };
 
-      // Island base: Inverted rocky cone with rocky layers
-      const baseGeo = new THREE.ConeGeometry(2.3, 3.2, 7);
-      baseGeo.rotateX(Math.PI);
-      const baseMat = new THREE.MeshStandardMaterial({
-        color: 0x3d2012,
-        roughness: 0.85,
-        metalness: 0.1,
-        flatShading: true
-      });
-      const islandBase = new THREE.Mesh(baseGeo, baseMat);
-      islandBase.position.y = -1.6;
-      islandBase.castShadow = true;
-      islandBase.receiveShadow = true;
-      group.add(islandBase);
-
-      // Top plateau
-      const topPlateauGeo = new THREE.CylinderGeometry(2.35, 2.3, 0.45, 7);
-      const topPlateauMat = new THREE.MeshStandardMaterial({
-        color:
-          factory.id === 'para-ti'
-            ? 0x2e6930
-            : factory.id === 'chocolates-sucre'
-            ? 0x357a38
-            : 0x4a6b32,
+      // Flat hexagonal platform: grass top with darker side rim, planar base.
+      // No hanging rock cone underneath.
+      const grassColor =
+        factory.id === 'para-ti'
+          ? 0x2e6930
+          : factory.id === 'chocolates-sucre'
+          ? 0x357a38
+          : 0x4a6b32;
+      const rimColor =
+        factory.id === 'para-ti'
+          ? 0x204a22
+          : factory.id === 'chocolates-sucre'
+          ? 0x245627
+          : 0x334a23;
+      // 6-segment cylinder keeps the top surface at the same height as
+      // before (y = 0.05 + 0.225 = 0.275) so buildings need no repositioning.
+      const platformGeo = new THREE.CylinderGeometry(2.35, 2.35, 0.45, 6);
+      const topMat = new THREE.MeshStandardMaterial({
+        color: grassColor,
         roughness: 0.7,
         flatShading: true
       });
-      const topPlateau = new THREE.Mesh(topPlateauGeo, topPlateauMat);
+      const sideMat = new THREE.MeshStandardMaterial({
+        color: rimColor,
+        roughness: 0.8,
+        flatShading: true
+      });
+      const topPlateau = new THREE.Mesh(platformGeo, [sideMat, topMat, sideMat]);
       topPlateau.position.y = 0.05;
       topPlateau.receiveShadow = true;
       topPlateau.userData.isFacadePlateau = true;
@@ -751,6 +808,32 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
 
     factories.forEach(createIsland);
 
+    // Staggered entrance: each island flies in from the far background one
+    // by one, then settles on its live carousel slot. GSAP is not installed,
+    // so easing runs manually in the rAF loop. Purely visual: carousel
+    // targets, raycast hover/click and dive handlers stay live throughout.
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const ENTRANCE_STAGGER = 0.5;
+    const ENTRANCE_DURATION = 1.1;
+    const ENTRANCE_FAR_Z = -7;
+    const ENTRANCE_FAR_Y = 2.5;
+    const ENTRANCE_START_SCALE = 0.01;
+    const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3);
+
+    if (!prefersReducedMotion) {
+      factories.forEach((factory) => {
+        const island = islandGroupsRef.current[factory.id];
+        if (island) {
+          island.position.z += ENTRANCE_FAR_Z;
+          island.position.y += ENTRANCE_FAR_Y;
+          island.scale.setScalar(ENTRANCE_START_SCALE);
+        }
+      });
+    }
+
     // 6. Raycasting & Drag Interaction setup
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -951,8 +1034,6 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         const angle = i * slotStep + carouselRot.current;
         const orbitX = Math.sin(angle) * 3.8;
         const orbitZ = -0.2 + Math.cos(angle) * 1.4;
-        group.position.x = THREE.MathUtils.lerp(group.position.x, orbitX, 0.12);
-        group.position.z = THREE.MathUtils.lerp(group.position.z, orbitZ, 0.12);
 
         // Hero elevation for the focused island + gentle hover on center island only
         const focusLift = isFocused ? 0.32 : 0;
@@ -960,14 +1041,35 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         const bob = Math.sin(elapsed * 1.5 + i * 2.1) * (isFocused ? 0.12 : 0.07);
 
         const targetY = factory.islandPosition[1] + bob + focusLift + hoverLift;
-        group.position.y = THREE.MathUtils.lerp(group.position.y, targetY, 0.1);
-        group.rotation.y = Math.sin(elapsed * 0.3 + i) * 0.05;
 
         // Compact scale so each island fits fully in frame
         const targetScale = isFocused ? (isHovered ? 1.0 : 0.96) : 0.84;
-        group.scale.setScalar(
-          THREE.MathUtils.lerp(group.scale.x, targetScale, 0.08)
-        );
+
+        // Entrance progress for this island: staggered one-by-one from far.
+        // Direct set (no incremental lerp) avoids double-animation jumps;
+        // once done, the normal carousel lerp below takes over seamlessly.
+        const entranceRaw = prefersReducedMotion
+          ? 1
+          : THREE.MathUtils.clamp((elapsed - i * ENTRANCE_STAGGER) / ENTRANCE_DURATION, 0, 1);
+        if (entranceRaw < 1) {
+          const entranceEase = easeOutCubic(entranceRaw);
+          group.position.set(
+            THREE.MathUtils.lerp(orbitX * 1.5, orbitX, entranceEase),
+            THREE.MathUtils.lerp(targetY + ENTRANCE_FAR_Y, targetY, entranceEase),
+            THREE.MathUtils.lerp(orbitZ + ENTRANCE_FAR_Z, orbitZ, entranceEase)
+          );
+          group.scale.setScalar(
+            THREE.MathUtils.lerp(ENTRANCE_START_SCALE, targetScale, entranceEase)
+          );
+        } else {
+          group.position.x = THREE.MathUtils.lerp(group.position.x, orbitX, 0.12);
+          group.position.z = THREE.MathUtils.lerp(group.position.z, orbitZ, 0.12);
+          group.position.y = THREE.MathUtils.lerp(group.position.y, targetY, 0.1);
+          group.scale.setScalar(
+            THREE.MathUtils.lerp(group.scale.x, targetScale, 0.08)
+          );
+        }
+        group.rotation.y = Math.sin(elapsed * 0.3 + i) * 0.05;
       });
 
       // Fixed camera: only subtle mouse/drag parallax, the islands do the moving.
@@ -995,12 +1097,23 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       camera.position.copy(currentCameraPos.current);
       camera.lookAt(currentLookAt.current);
 
-      renderer.render(scene, camera);
+      try {
+        renderer?.render(scene, camera);
+        framesRenderedRef.current += 1;
+      } catch (error) {
+        // Async render failures (context loss mid-session) are invisible to
+        // ErrorBoundary: stop the loop and show the 2D fallback, never black.
+        if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+        setWebglError(error instanceof Error ? error.message : 'WebGL render failed');
+      }
     };
 
     animate();
 
     return () => {
+      if (renderer !== null && handleContextLost !== null) {
+        renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
+      }
       window.removeEventListener('resize', handleResize);
       container.removeEventListener('pointerdown', handlePointerDown);
       container.removeEventListener('pointermove', handlePointerMove);
@@ -1010,17 +1123,68 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
-      if (renderer.domElement && container.contains(renderer.domElement)) {
+      if (renderer !== null && renderer.domElement && container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
-      renderer.dispose();
+      renderer?.dispose();
     };
   }, [factories, goToNextIsland, goToPrevIsland, handleInitiateDive, selectIslandByIndex]);
 
+  // Live theme sync (no scene rebuild): fog wash + key lights follow the
+  // global theme in vivo. Dark restores the original night values exactly.
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const light = theme === 'light';
+    if (scene.fog instanceof THREE.FogExp2) {
+      scene.fog.color.set(light ? 0xf3e7d3 : 0x130905);
+    }
+    if (ambientLightRef.current) {
+      ambientLightRef.current.color.set(light ? 0xfff6e8 : 0xffeedd);
+      ambientLightRef.current.intensity = light ? 1.25 : 1.05;
+    }
+    if (sunLightRef.current) {
+      sunLightRef.current.color.set(light ? 0xfff1d6 : 0xffdfa9);
+      sunLightRef.current.intensity = light ? 2.0 : 2.3;
+    }
+    if (goldFillRef.current) {
+      goldFillRef.current.color.set(light ? 0xc9962e : 0xd4af37);
+      goldFillRef.current.intensity = light ? 0.9 : 1.25;
+    }
+    if (pointLightRef.current) {
+      pointLightRef.current.color.set(light ? 0xffd9a0 : 0xffa500);
+      pointLightRef.current.intensity = light ? 1.6 : 2.2;
+    }
+  }, [theme]);
+
   const focusedFactory = factories[focusedIndex] || factories[0];
 
+  // Graceful 2D fallback: factory navigation stays usable without WebGL.
+  if (webglError !== null) {
+    return (
+      <div className="relative w-full h-screen overflow-y-auto bg-[#faf6ef] dark:bg-[#120a06] px-6 py-16 text-center">
+        <h2 className="text-2xl font-bold text-[#2b1a12] dark:text-[#fcf8f2]">3D unavailable, the tour continues</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[#5c4433] dark:text-[#d7c4b7]">
+          Your browser blocked WebGL ({webglError}). Pick a factory below to continue.
+        </p>
+        <div className="mx-auto mt-6 flex max-w-lg flex-col gap-3">
+          {factories.map((factory) => (
+            <button
+              key={factory.id}
+              type="button"
+              onClick={() => onSelectFactory(factory)}
+              className="min-h-[44px] rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] px-4 py-3 text-left text-[#2b1a12] dark:text-[#fcf8f2] border border-[#d4af37]/40 font-bold cursor-pointer"
+            >
+              {factory.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-      <div className="relative w-full h-screen overflow-hidden bg-[radial-gradient(ellipse_at_center,#6e3c12_0%,#3d1e08_38%,#180b04_68%,#070302_100%)] select-none">
+      <div className="relative w-full h-screen overflow-hidden bg-[radial-gradient(ellipse_at_center,#fdf8ec_0%,#f7ecd4_45%,#efddba_75%,#e6cfa4_100%)] dark:bg-[radial-gradient(ellipse_at_center,#6e3c12_0%,#3d1e08_38%,#180b04_68%,#070302_100%)] select-none">
       
       {/* 3D Canvas Mount Point with Touch Action None to enable smooth touch dragging */}
       <div
@@ -1029,13 +1193,13 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       />
 
       {/* Atmospheric Vignette & Horizon Glow */}
-      <div className="absolute inset-0 pointer-events-none bg-radial-[at_50%_40%] from-transparent via-[#140a05]/40 to-[#0c0502]/90" />
+      <div className="absolute inset-0 pointer-events-none bg-radial-[at_50%_40%] from-transparent via-[#d9c49a]/25 dark:via-[#140a05]/40 to-[#c9a86a]/35 dark:to-[#0c0502]/90" />
 
       {/* Floating Left & Right Navigation Chevrons */}
       <button
         onClick={goToPrevIsland}
         aria-label="Isla anterior"
-        className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 z-20 w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-[#1c100a]/80 hover:bg-[#2b170e] border border-[#d4af37]/35 hover:border-[#d4af37] text-[#e5c158] hover:text-[#fff] backdrop-blur-xl shadow-2xl shadow-black/70 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer group"
+        className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 z-20 w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-[#fffdf8]/80 dark:bg-[#1c100a]/80 hover:bg-[#f3e7d3] hover:dark:bg-[#2b170e] border border-[#d4af37]/35 hover:border-[#d4af37] text-[#8a6216] dark:text-[#e5c158] hover:text-[#2b1a12] hover:dark:text-[#fff] backdrop-blur-xl shadow-2xl shadow-black/70 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer group"
       >
         <ChevronLeft className="w-6 h-6 group-hover:-translate-x-0.5 transition-transform" />
       </button>
@@ -1043,7 +1207,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       <button
         onClick={goToNextIsland}
         aria-label="Siguiente isla"
-        className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 z-20 w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-[#1c100a]/80 hover:bg-[#2b170e] border border-[#d4af37]/35 hover:border-[#d4af37] text-[#e5c158] hover:text-[#fff] backdrop-blur-xl shadow-2xl shadow-black/70 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer group"
+        className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 z-20 w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-[#fffdf8]/80 dark:bg-[#1c100a]/80 hover:bg-[#f3e7d3] hover:dark:bg-[#2b170e] border border-[#d4af37]/35 hover:border-[#d4af37] text-[#8a6216] dark:text-[#e5c158] hover:text-[#2b1a12] hover:dark:text-[#fff] backdrop-blur-xl shadow-2xl shadow-black/70 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer group"
       >
         <ChevronRight className="w-6 h-6 group-hover:translate-x-0.5 transition-transform" />
       </button>
@@ -1060,13 +1224,13 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
               className="absolute bottom-8 sm:bottom-10 md:bottom-12 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
             >
-              <div className="bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl px-4 py-2 flex items-center justify-between gap-2 sm:gap-3 shadow-2xl shadow-black/90">
+              <div className="bg-[#fffdf8]/92 dark:bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl px-4 py-2 flex items-center justify-between gap-2 sm:gap-3 shadow-2xl shadow-black/90">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <span
                     className="w-2.5 h-2.5 shrink-0 rounded-full ring-2 ring-[#d4af37]/30"
                     style={{ backgroundColor: focusedFactory.accentColor }}
                   />
-                  <h3 className="truncate text-base sm:text-lg font-bold text-[#fcf8f2] font-serif-luxury">
+                  <h3 className="truncate text-base sm:text-lg font-bold text-[#2b1a12] dark:text-[#fcf8f2] font-serif-luxury">
                     {focusedFactory.name}
                   </h3>
                 </div>
@@ -1075,7 +1239,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                     type="button"
                     onClick={() => handleInitiateDive(focusedFactory)}
                     aria-label={`Entrar a la Isla ${focusedFactory.name}`}
-                    className="min-h-[44px] px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex shrink-0 items-center gap-1.5 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
+                    className="min-h-[44px] px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#8a6216] dark:via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex shrink-0 items-center gap-1.5 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
                   >
                     <span className="sm:hidden">Entrar</span>
                     <span className="hidden sm:inline">Entrar a la Isla</span>
@@ -1086,7 +1250,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                     onClick={toggleHudCollapsed}
                     aria-expanded={false}
                     aria-label="Mostrar información de la isla"
-                    className="min-w-[44px] min-h-[44px] w-11 h-11 shrink-0 rounded-xl bg-[#2e1910] border border-[#d4af37]/30 text-[#e5c158] hover:text-white hover:border-[#d4af37] flex items-center justify-center transition-colors cursor-pointer"
+                    className="min-w-[44px] min-h-[44px] w-11 h-11 shrink-0 rounded-xl bg-[#efe0c6] dark:bg-[#2e1910] border border-[#d4af37]/30 text-[#8a6216] dark:text-[#e5c158] hover:text-[#2b1a12] hover:dark:text-white hover:border-[#d4af37] flex items-center justify-center transition-colors cursor-pointer"
                   >
                     <ChevronUp className="w-5 h-5" />
                   </button>
@@ -1102,7 +1266,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             className="absolute bottom-8 sm:bottom-10 md:bottom-12 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
           >
-            <div className="bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl p-4 sm:p-5 shadow-2xl shadow-black/90">
+            <div className="bg-[#fffdf8]/92 dark:bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl p-4 sm:p-5 shadow-2xl shadow-black/90">
               
               {/* Card Header */}
               <div className="flex items-start justify-between gap-3 mb-2">
@@ -1116,15 +1280,15 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                       Fábrica Emblemática
                     </span>
                   </div>
-                  <h3 className="text-xl sm:text-2xl font-bold text-[#fcf8f2] font-serif-luxury mt-0.5">
+                  <h3 className="text-xl sm:text-2xl font-bold text-[#2b1a12] dark:text-[#fcf8f2] font-serif-luxury mt-0.5">
                     {focusedFactory.name}
                   </h3>
-                  <p className="text-[11px] text-[#e5c158] italic font-serif-luxury">
+                  <p className="text-[11px] text-[#8a6216] dark:text-[#e5c158] italic font-serif-luxury">
                     "{focusedFactory.slogan}"
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#2e1910] border border-[#d4af37]/30 text-xs text-[#e5c158] font-semibold">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#efe0c6] dark:bg-[#2e1910] border border-[#d4af37]/30 text-xs text-[#8a6216] dark:text-[#e5c158] font-semibold">
                     <Calendar className="w-3.5 h-3.5 text-[#d4af37]" />
                     <span>{focusedFactory.foundationYear}</span>
                   </div>
@@ -1133,7 +1297,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                     onClick={toggleHudCollapsed}
                     aria-expanded={!isHudCollapsed}
                     aria-label="Ocultar información de la isla"
-                    className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl bg-[#2e1910] border border-[#d4af37]/30 text-[#e5c158] hover:text-white hover:border-[#d4af37] flex items-center justify-center transition-colors cursor-pointer"
+                    className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl bg-[#efe0c6] dark:bg-[#2e1910] border border-[#d4af37]/30 text-[#8a6216] dark:text-[#e5c158] hover:text-[#2b1a12] hover:dark:text-white hover:border-[#d4af37] flex items-center justify-center transition-colors cursor-pointer"
                   >
                     <ChevronDown className="w-5 h-5" />
                   </button>
@@ -1141,13 +1305,13 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
               </div>
 
               {/* Description */}
-              <p className="text-xs text-[#d7c4b7] line-clamp-2 mb-3 leading-relaxed">
+              <p className="text-xs text-[#5c4433] dark:text-[#d7c4b7] line-clamp-2 mb-3 leading-relaxed">
                 {focusedFactory.description}
               </p>
 
               {/* Bottom Actions & Location */}
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-2.5 border-t border-[#d4af37]/20">
-                <div className="text-[11px] text-[#bda393] flex min-w-0 flex-1 items-center gap-1 max-w-[210px]">
+                <div className="text-[11px] text-[#7a5c48] dark:text-[#bda393] flex min-w-0 flex-1 items-center gap-1 max-w-[210px]">
                   <MapPin className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
                   <span className="truncate">{focusedFactory.headquarters}</span>
                 </div>
@@ -1155,7 +1319,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                 {/* Primary Dive Button */}
                 <button
                   onClick={() => handleInitiateDive(focusedFactory)}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex shrink-0 items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#8a6216] dark:via-[#e5c158] to-[#b8860b] text-[#1a0f08] font-bold text-xs flex shrink-0 items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#d4af37]/30 cursor-pointer"
                 >
                   <span>Entrar a la Isla</span>
                   <ArrowRight className="w-3.5 h-3.5 text-[#1a0f08]" />
@@ -1175,7 +1339,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.9 }}
-            className="absolute inset-0 z-40 bg-[#120a06] flex flex-col items-center justify-center pointer-events-none"
+            className="absolute inset-0 z-40 bg-[#faf6ef] dark:bg-[#120a06] flex flex-col items-center justify-center pointer-events-none"
           >
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
@@ -1183,14 +1347,11 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
               transition={{ duration: 0.6 }}
               className="text-center px-4"
             >
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[#d4af37] to-[#8b5a2b] p-0.5 shadow-2xl shadow-[#d4af37]/40 flex items-center justify-center">
-                <Sparkles className="w-8 h-8 text-[#1a0f08]" />
-              </div>
-              <h3 className="text-2xl sm:text-4xl font-bold text-[#fcf8f2] font-royal">
+              <h3 className="text-2xl sm:text-4xl font-bold text-[#2b1a12] dark:text-[#fcf8f2] font-royal">
                 Adentrándose en {activeFactory.name}
               </h3>
-              <p className="text-sm text-[#e5c158] mt-2 font-serif-luxury italic">
-                Abriendo las puertas del pasillo patrimonial...
+              <p className="text-sm text-[#8a6216] dark:text-[#e5c158] mt-2 font-serif-luxury italic">
+                Abriendo la Sala Real de Productos...
               </p>
             </motion.div>
           </motion.div>

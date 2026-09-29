@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-// M2 dive: factory select must always reach the corridor. Written tolerant:
-// the new code shows a skippable timed diving overlay, the pre-dive code goes
-// direct — both satisfy "corridor always reachable".
-test('factory select always reaches the corridor (skip path)', async ({ page }) => {
+// Dive: factory select must always reach the chamber (Sala Real). The corridor
+// phase is retired: archipelago -> diving -> chamber, Escape skips the dive.
+test('factory select always reaches the chamber (skip path)', async ({ page }) => {
   await page.goto('/');
   const entrar = page.getByRole('button', { name: /Entrar a la Isla/i });
   await expect(entrar).toBeVisible({ timeout: 15000 });
@@ -12,20 +11,20 @@ test('factory select always reaches the corridor (skip path)', async ({ page }) 
   try {
     if (await skip.isVisible({ timeout: 3000 })) await skip.click();
   } catch {
-    // No diving overlay (pre-dive build): corridor is reached directly.
+    // No diving overlay with a skip button: chamber is reached directly.
   }
-  await expect(page.getByText(/Pasillo Hist/i).first()).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/Sala Real/i).first()).toBeVisible({ timeout: 15000 });
 });
 
-test('timed dive reaches corridor without skipping', async ({ page }) => {
+test('timed dive reaches chamber without skipping', async ({ page }) => {
   await page.goto('/');
   const entrar = page.getByRole('button', { name: /Entrar a la Isla/i });
   await expect(entrar).toBeVisible({ timeout: 15000 });
   await entrar.click();
-  await expect(page.getByText(/Pasillo Hist/i).first()).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/Sala Real/i).first()).toBeVisible({ timeout: 15000 });
 });
 
-test('reduced-motion still reaches corridor', async ({ browser }) => {
+test('reduced-motion still reaches chamber', async ({ browser }) => {
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   const page = await context.newPage();
   try {
@@ -33,7 +32,7 @@ test('reduced-motion still reaches corridor', async ({ browser }) => {
     const entrar = page.getByRole('button', { name: /Entrar a la Isla/i });
     await expect(entrar).toBeVisible({ timeout: 15000 });
     await entrar.click();
-    await expect(page.getByText(/Pasillo Hist/i).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/Sala Real/i).first()).toBeVisible({ timeout: 15000 });
   } finally {
     await context.close();
   }

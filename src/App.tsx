@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { FACTORIES, fetchCatalog, toCommerce, type CatalogEntry } from './data/factories';
+import { FACTORIES, fetchCatalog, type CatalogEntry } from './data/factories';
 import { ChocolateFactory, ProductSpec, RoutePhase } from './types/chocolate';
 import { Navbar } from './components/Navbar';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -9,7 +9,6 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { AdminPanel } from './components/AdminPanel';
 import { FloatingIslandsView } from './components/FloatingIslandsView';
 import { AmbientVideo } from './components/AmbientVideo';
-import { HeritageCorridorView } from './components/HeritageCorridorView';
 import { RoyalChamberView } from './components/RoyalChamberView';
 import { UnwrappingModalView } from './components/UnwrappingModalView';
 import { ArExperienceView } from './components/ArExperienceView';
@@ -17,7 +16,7 @@ import { TourGuideModal } from './components/TourGuideModal';
 import { toggleAudio, isAudioEnabled, getAudioContext, playIslandDiveChime } from './utils/audio';
 import { initMonitoring } from './lib/monitoring';
 
-// Timed M2 dive: archipelago -> diving -> corridor (matches island camera travel).
+// Timed dive: archipelago -> diving -> chamber (matches island camera travel).
 const DIVE_MS = 1200;
 
 // M15 observability: attach global error handlers once (no-op without VITE_SENTRY_DSN).
@@ -51,7 +50,7 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
-  // Pending M2 dive timer + the factory it carries to the corridor.
+  // Pending dive timer + the factory it carries to the chamber.
   const diveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const divingFactoryId = useRef<string | null>(null);
   function clearDiveTimer(): void {
@@ -84,9 +83,6 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
       setNavbarVisible(true);
     } else if (phase === 'diving') {
       setNavbarVisible(false);
-    } else if (phase === 'corridor') {
-      // In corridor, visible at start and end
-      setNavbarVisible(true);
     } else if (phase === 'unwrap') {
       setNavbarVisible(true);
     } else if (phase === 'ar') {
@@ -122,31 +118,48 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
     } catch { reduced = false }
     if (reduced) {
       divingFactoryId.current = null;
-      setPhase('corridor');
+      setPhase('chamber');
       return;
     }
     // Chime runs in the click gesture (autoplay-safe); the timer then walks
-    // archipelago -> diving -> corridor. Skippable, corridor always reachable.
+    // archipelago -> diving -> chamber. Skippable, chamber always reachable.
     divingFactoryId.current = factory.id;
     playIslandDiveChime();
     setPhase('diving');
     diveTimer.current = setTimeout(() => {
       diveTimer.current = null;
       divingFactoryId.current = null;
-      setPhase('corridor');
+      setPhase('chamber');
     }, DIVE_MS);
   };
 
   const handleSkipDive = () => {
     clearDiveTimer();
     divingFactoryId.current = null;
-    setPhase('corridor');
+    setPhase('chamber');
   };
 
+  // Safety net: the timed dive must always reach the chamber, even if the
+  // primary timer is lost (throttled tab, HMR swap). Escape still skips it.
+  // The cinematic title lives in FloatingIslandsView (pointer-events-none).
+  useEffect(() => {
+    if (phase !== 'diving') return;
+    const watchdog = setTimeout(() => {
+      divingFactoryId.current = null;
+      setPhase((p) => (p === 'diving' ? 'chamber' : p));
+    }, DIVE_MS + 2500);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleSkipDive();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(watchdog);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [phase]);
+
   // Navbar factory shortcuts (Para Ti / Sucre / Taboada) jump straight to
-  // that factory's product room (Sala Real), bypassing the corridor dive.
-  // The islands view keeps the corridor flow; the corridor stays reachable
-  // via Ver Islas / Pasillo Histórico.
+  // that factory's product room (Sala Real).
   const handleShortcutFactory = (factory: ChocolateFactory) => {
     clearDiveTimer();
     divingFactoryId.current = null;
@@ -188,13 +201,6 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
     setCurrentFactory(null);
   };
 
-  const handleGoToCorridor = () => {
-    if (currentFactory) {
-      setSelectedProduct(null);
-      setPhase('corridor');
-    }
-  };
-
   // M10 search: jump to the picked product's factory chamber (sku == product id).
   const handleSearchPick = (sku: string) => {
     const factory = FACTORIES.find((f) => f.products.some((p) => p.id === sku));
@@ -208,7 +214,7 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
     <AuthProvider>
     <CartProvider>
     <CartServerBridge />
-    <div className="relative w-screen h-dvh overflow-hidden bg-[#120a06] text-[#f7efe5] font-sans select-none">
+    <div className="relative w-screen h-dvh overflow-hidden bg-[#faf6ef] dark:bg-[#120a06] text-[#2b1a12] dark:text-[#f7efe5] font-sans select-none">
       {/* M6 ambient background videos (renders nothing when no /videos/*.mp4 exist) */}
       <AmbientVideo />
       {/* Dynamic Global Floating Navbar */}
@@ -222,7 +228,6 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
         factories={FACTORIES}
         onReturnToArchipelago={handleReturnToArchipelago}
         onGoToChamber={handleEnterChamber}
-        onGoToCorridor={handleGoToCorridor}
         onOpenGuide={() => setIsGuideOpen(true)}
         onOpenCart={() => setCartOpen(true)}
         onSearchPick={handleSearchPick}
@@ -238,37 +243,17 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
           />
         )}
 
-        {/* M2 dive overlay: timed transition with skip; navbar hides via phase */}
-        {phase === 'diving' && currentFactory && (
-          <div role="status" aria-live="polite" aria-label={`Transición hacia ${currentFactory.name}`}
-            className="absolute inset-0 z-50 bg-[#120a06] flex flex-col items-center justify-center px-4">
-            <h3 className="text-2xl sm:text-4xl font-bold text-[#fcf8f2] text-center">
-              Adentrándose en {currentFactory.name}
-            </h3>
-            <p className="text-sm text-[#e5c158] mt-2 italic text-center">
-              Abriendo las puertas del pasillo patrimonial…
-            </p>
-            <button onClick={handleSkipDive} aria-label="Omitir transición"
-              className="mt-6 min-h-[44px] min-w-[44px] px-6 rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/40 text-sm font-bold cursor-pointer">
-              Omitir
-            </button>
-          </div>
-        )}
-
-        {phase === 'corridor' && currentFactory && (
-          <HeritageCorridorView
-            factory={currentFactory}
-            onEnterChamber={handleEnterChamber}
-            onReturnToArchipelago={handleReturnToArchipelago}
-          />
-        )}
+        {/* Dive: no App-level interstitial here. The cinematic dive title
+            lives in FloatingIslandsView (activeFactory overlay); this phase
+            only keeps the islands mounted during camera travel, then chamber. */}
 
         {phase === 'chamber' && currentFactory && (
           <RoyalChamberView
             factory={currentFactory}
             onSelectProduct={handleSelectProduct}
-            onReturnToCorridor={handleGoToCorridor}
             onReturnToArchipelago={handleReturnToArchipelago}
+            catalog={catalogMap}
+            onAdded={() => setCartOpen(true)}
           />
         )}
 
@@ -283,7 +268,7 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
 
         {phase === 'ar' && currentFactory && selectedProduct && (
           <ArExperienceView
-            sku={toCommerce(selectedProduct).sku}
+            product={selectedProduct}
             onBackToChamber={handleBackToChamberFromAr}
           />
         )}

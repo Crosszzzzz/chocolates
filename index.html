@@ -1,8 +1,21 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Pre-paint theme restore (default dark): avoids a light flash on load.
+      // Mirrors src/lib/theme.ts (THEME_STORAGE_KEY / DEFAULT_THEME).
+      try {
+        var stored = localStorage.getItem('ruta-chocolate-theme');
+        var theme = stored === 'light' ? 'light' : 'dark';
+        document.documentElement.classList.remove('dark', 'light');
+        document.documentElement.classList.add(theme);
+        document.documentElement.style.colorScheme = theme;
+      } catch (e) {
+        document.documentElement.classList.add('dark');
+      }
+    </script>
     <title>Ruta del Chocolate de Sucre</title>
     <meta name="description" content="Plataforma 3D interactiva de la ruta patrimonial del chocolate de Sucre, con islas flotantes de fábricas emblemáticas, recorridos inmersivos y desempaquetado de productos en 3D." />
     <meta property="og:title" content="Ruta del Chocolate de Sucre" />
@@ -15,7 +28,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,400;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   </head>
-  <body class="bg-[#120a06] text-[#f7efe5] overflow-x-hidden selection:bg-[#c28549] selection:text-white">
+  <body class="bg-[#faf6ef] text-[#2b1a12] dark:bg-[#120a06] dark:text-[#f7efe5] overflow-x-hidden selection:bg-[#c28549] selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

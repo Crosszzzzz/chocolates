@@ -11,6 +11,7 @@ import handler, {
   parseCartUserId,
   readQueryUserId,
 } from '../../api/cart';
+import { addLineToCart } from './cart';
 
 type Req = Parameters<typeof handler>[0];
 type Res = Parameters<typeof handler>[1];
@@ -129,6 +130,27 @@ describe('mergeCarts (server wins)', () => {
 
   it('drops non-positive lines and keeps server order first', () => {
     expect(mergeCarts([{ sku: 'a', qty: 0 }], [{ sku: 'b', qty: 0 }])).toEqual([]);
+  });
+});
+
+describe('addLineToCart (add-to-cart button flow)', () => {
+  it('adds a new SKU with qty 1 when stock is available', () => {
+    expect(addLineToCart([], 'a', 5)).toEqual({ lines: [{ sku: 'a', qty: 1 }], warning: null });
+  });
+
+  it('increments an existing SKU while under stock', () => {
+    expect(addLineToCart([{ sku: 'a', qty: 1 }], 'a', 5)).toEqual({ lines: [{ sku: 'a', qty: 2 }], warning: null });
+  });
+
+  it('refuses out-of-stock adds (the button is disabled client-side too)', () => {
+    expect(addLineToCart([], 'a', 0)).toEqual({ lines: [], warning: 'Sin stock' });
+  });
+
+  it('clamps at the stock cap with a Spanish warning', () => {
+    expect(addLineToCart([{ sku: 'a', qty: 2 }], 'a', 2)).toEqual({
+      lines: [{ sku: 'a', qty: 2 }],
+      warning: 'Solo quedan 2 unidades',
+    });
   });
 });
 

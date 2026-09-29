@@ -93,55 +93,55 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)} aria-label="Abrir administración"
-        className="fixed bottom-4 right-4 z-[65] min-h-[44px] px-4 flex items-center gap-2 rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/30 text-xs font-bold cursor-pointer">
+        className="fixed bottom-4 right-4 z-[65] min-h-[44px] px-4 flex items-center gap-2 rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] text-[#8a6216] dark:text-[#e5c158] border border-[#d4af37]/30 text-xs font-bold cursor-pointer">
         <ShieldCheck className="w-4 h-4" /><span>Administrar</span>
       </button>
     );
   }
   return (
     <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Administración del catálogo">
-      <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-      <div className="relative w-full sm:max-w-lg bg-[#1c100a] border border-[#d4af37]/30 rounded-t-2xl sm:rounded-2xl p-5 max-h-[85dvh] overflow-y-auto">
+      <div className="absolute inset-0 bg-black/40 dark:bg-black/60" onClick={() => setOpen(false)} />
+      <div className="relative w-full sm:max-w-lg bg-[#fffdf8] dark:bg-[#1c100a] border border-[#d4af37]/30 rounded-t-2xl sm:rounded-2xl p-5 max-h-[85dvh] overflow-y-auto">
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-base font-bold text-[#fcf8f2]">Administración</h2>
-          <button onClick={() => setOpen(false)} aria-label="Cerrar administración" className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/25 cursor-pointer"><X className="w-4 h-4" /></button>
+          <h2 className="text-base font-bold text-[#2b1a12] dark:text-[#fcf8f2]">Administración</h2>
+          <button onClick={() => setOpen(false)} aria-label="Cerrar administración" className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] text-[#8a6216] dark:text-[#e5c158] border border-[#d4af37]/25 cursor-pointer"><X className="w-4 h-4" /></button>
         </div>
-        <p className="text-xs text-[#bda393] mb-3">Precios en BOB y stock. Solo delivery en Sucre (validado en compra).</p>
-        <div className="mb-3 rounded-xl bg-[#25130b] border border-[#d4af37]/20 p-3" aria-label="Resumen de ventas">
+        <p className="text-xs text-[#7a5c48] dark:text-[#bda393] mb-3">Precios en BOB y stock. Solo delivery en Sucre (validado en compra).</p>
+        <div className="mb-3 rounded-xl bg-[#ffffff] dark:bg-[#25130b] border border-[#d4af37]/20 p-3" aria-label="Resumen de ventas">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-bold text-[#fcf8f2]">Resumen</h3>
-            <button onClick={() => void loadStats()} aria-label="Actualizar panel" className="min-h-[44px] px-3 rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/25 text-xs font-bold cursor-pointer">Actualizar</button>
+            <h3 className="text-sm font-bold text-[#2b1a12] dark:text-[#fcf8f2]">Resumen</h3>
+            <button onClick={() => void loadStats()} aria-label="Actualizar panel" className="min-h-[44px] px-3 rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] text-[#8a6216] dark:text-[#e5c158] border border-[#d4af37]/25 text-xs font-bold cursor-pointer">Actualizar</button>
           </div>
-          {statsLoading && <p role="status" className="text-xs text-[#bda393] mb-2">Cargando panel…</p>}
-          {statsError !== null && <p role="alert" className="text-xs text-[#f0a6a6] mb-2">{statsError}</p>}
+          {statsLoading && <p role="status" className="text-xs text-[#7a5c48] dark:text-[#bda393] mb-2">Cargando panel…</p>}
+          {statsError !== null && <p role="alert" className="text-xs text-[#b3261e] dark:text-[#f0a6a6] mb-2">{statsError}</p>}
           {stats !== null && (
             <>
               <div className="grid grid-cols-2 gap-2 mb-3">
-                <div className="p-2 rounded-xl bg-[#120a06] border border-[#d4af37]/15">
-                  <p className="text-[11px] text-[#bda393]">Pedidos</p>
-                  <p className="text-base font-extrabold text-[#fcf8f2]" aria-label={`${stats.kpis.totalOrders} pedidos`}>{stats.kpis.totalOrders}</p>
+                <div className="p-2 rounded-xl bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/15">
+                  <p className="text-[11px] text-[#7a5c48] dark:text-[#bda393]">Pedidos</p>
+                  <p className="text-base font-extrabold text-[#2b1a12] dark:text-[#fcf8f2]" aria-label={`${stats.kpis.totalOrders} pedidos`}>{stats.kpis.totalOrders}</p>
                 </div>
-                <div className="p-2 rounded-xl bg-[#120a06] border border-[#d4af37]/15">
-                  <p className="text-[11px] text-[#bda393]">Ingresos Bs</p>
-                  <p className="text-base font-extrabold text-[#f1c40f]" aria-label={`Ingresos ${stats.kpis.revenueBOB} bolivianos`}>Bs {stats.kpis.revenueBOB.toFixed(2)}</p>
+                <div className="p-2 rounded-xl bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/15">
+                  <p className="text-[11px] text-[#7a5c48] dark:text-[#bda393]">Ingresos Bs</p>
+                  <p className="text-base font-extrabold text-[#8a6216] dark:text-[#f1c40f]" aria-label={`Ingresos ${stats.kpis.revenueBOB} bolivianos`}>Bs {stats.kpis.revenueBOB.toFixed(2)}</p>
                 </div>
-                <div className="p-2 rounded-xl bg-[#120a06] border border-[#d4af37]/15">
-                  <p className="text-[11px] text-[#bda393]">Productos activos</p>
-                  <p className="text-base font-extrabold text-[#fcf8f2]">{stats.kpis.activeProducts}</p>
+                <div className="p-2 rounded-xl bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/15">
+                  <p className="text-[11px] text-[#7a5c48] dark:text-[#bda393]">Productos activos</p>
+                  <p className="text-base font-extrabold text-[#2b1a12] dark:text-[#fcf8f2]">{stats.kpis.activeProducts}</p>
                 </div>
-                <div className="p-2 rounded-xl bg-[#120a06] border border-[#d4af37]/15">
-                  <p className="text-[11px] text-[#bda393]">Sin stock</p>
-                  <p className="text-base font-extrabold text-[#f0a6a6]">{stats.kpis.outOfStock}</p>
+                <div className="p-2 rounded-xl bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/15">
+                  <p className="text-[11px] text-[#7a5c48] dark:text-[#bda393]">Sin stock</p>
+                  <p className="text-base font-extrabold text-[#b3261e] dark:text-[#f0a6a6]">{stats.kpis.outOfStock}</p>
                 </div>
               </div>
-              <h4 className="text-xs font-bold text-[#fcf8f2] mb-1">Pedidos recientes</h4>
+              <h4 className="text-xs font-bold text-[#2b1a12] dark:text-[#fcf8f2] mb-1">Pedidos recientes</h4>
               {stats.recentOrders.length === 0 ? (
-                <p className="text-xs text-[#bda393] mb-2">Sin pedidos todavía.</p>
+                <p className="text-xs text-[#7a5c48] dark:text-[#bda393] mb-2">Sin pedidos todavía.</p>
               ) : (
                 <div className="overflow-x-auto mb-2">
-                  <table className="w-full text-[11px] text-[#fcf8f2]">
+                  <table className="w-full text-[11px] text-[#2b1a12] dark:text-[#fcf8f2]">
                     <thead>
-                      <tr className="text-left text-[#bda393]">
+                      <tr className="text-left text-[#7a5c48] dark:text-[#bda393]">
                         <th className="py-1 pr-2 font-bold">Pedido</th>
                         <th className="py-1 pr-2 font-bold">Total</th>
                         <th className="py-1 pr-2 font-bold">Artículos</th>
@@ -165,13 +165,13 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
                   </table>
                 </div>
               )}
-              <h4 className="text-xs font-bold text-[#fcf8f2] mb-1">Alertas de stock</h4>
+              <h4 className="text-xs font-bold text-[#2b1a12] dark:text-[#fcf8f2] mb-1">Alertas de stock</h4>
               {stats.kpis.lowStock.length === 0 ? (
-                <p className="text-xs text-[#bda393]">Stock sin alertas.</p>
+                <p className="text-xs text-[#7a5c48] dark:text-[#bda393]">Stock sin alertas.</p>
               ) : (
                 <ul className="flex flex-col gap-1" aria-label="Alertas de stock bajo">
                   {stats.kpis.lowStock.map((p) => (
-                    <li key={p.sku} className="text-[11px] text-[#e8c97a]">
+                    <li key={p.sku} className="text-[11px] text-[#8a6216] dark:text-[#e8c97a]">
                       {p.nameEs} — {p.stock <= 0 ? 'sin stock' : `quedan ${p.stock}`}
                     </li>
                   ))}
@@ -180,27 +180,27 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
             </>
           )}
         </div>
-        <div className="mb-3 rounded-xl bg-[#25130b] border border-[#d4af37]/20 p-3" aria-label="Reseñas pendientes">
+        <div className="mb-3 rounded-xl bg-[#ffffff] dark:bg-[#25130b] border border-[#d4af37]/20 p-3" aria-label="Reseñas pendientes">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-bold text-[#fcf8f2]">Reseñas {queue.length > 0 && <span className="text-[#e5c158]">({queue.length})</span>}</h3>
-            <button onClick={() => void loadQueue()} aria-label="Actualizar reseñas" className="min-h-[44px] px-3 rounded-xl bg-[#2b170e] text-[#e5c158] border border-[#d4af37]/25 text-xs font-bold cursor-pointer">Actualizar</button>
+            <h3 className="text-sm font-bold text-[#2b1a12] dark:text-[#fcf8f2]">Reseñas {queue.length > 0 && <span className="text-[#8a6216] dark:text-[#e5c158]">({queue.length})</span>}</h3>
+            <button onClick={() => void loadQueue()} aria-label="Actualizar reseñas" className="min-h-[44px] px-3 rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] text-[#8a6216] dark:text-[#e5c158] border border-[#d4af37]/25 text-xs font-bold cursor-pointer">Actualizar</button>
           </div>
-          {queueLoading && <p role="status" className="text-xs text-[#bda393] mb-2">Cargando reseñas…</p>}
-          {queueError !== null && <p role="alert" className="text-xs text-[#f0a6a6] mb-2">{queueError}</p>}
+          {queueLoading && <p role="status" className="text-xs text-[#7a5c48] dark:text-[#bda393] mb-2">Cargando reseñas…</p>}
+          {queueError !== null && <p role="alert" className="text-xs text-[#b3261e] dark:text-[#f0a6a6] mb-2">{queueError}</p>}
           {!queueLoading && queueError === null && queue.length === 0 && (
-            <p className="text-xs text-[#bda393]">Sin reseñas pendientes.</p>
+            <p className="text-xs text-[#7a5c48] dark:text-[#bda393]">Sin reseñas pendientes.</p>
           )}
           {queue.length > 0 && (
             <ul className="flex flex-col gap-2" aria-label="Lista de reseñas pendientes">
               {queue.map((r) => (
-                <li key={r.id} className="p-2 rounded-xl bg-[#120a06] border border-[#d4af37]/15">
-                  <p className="text-[11px] text-[#bda393]">{r.sku} · {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
-                  {r.comment !== '' && <p className="text-xs text-[#fcf8f2] mt-1 leading-relaxed">{r.comment}</p>}
+                <li key={r.id} className="p-2 rounded-xl bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/15">
+                  <p className="text-[11px] text-[#7a5c48] dark:text-[#bda393]">{r.sku} · {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
+                  {r.comment !== '' && <p className="text-xs text-[#2b1a12] dark:text-[#fcf8f2] mt-1 leading-relaxed">{r.comment}</p>}
                   <div className="flex gap-1.5 mt-2">
                     <button onClick={() => void moderate(r.id, 'approved')} disabled={moderating === r.id} aria-label={`Aprobar reseña de ${r.sku}`} className="min-h-[44px] px-3 rounded-xl bg-[#d4af37] text-[#1a0f08] text-xs font-bold disabled:opacity-60 cursor-pointer">
                       {moderating === r.id ? 'Guardando…' : 'Aprobar'}
                     </button>
-                    <button onClick={() => void moderate(r.id, 'rejected')} disabled={moderating === r.id} aria-label={`Rechazar reseña de ${r.sku}`} className="min-h-[44px] px-3 rounded-xl bg-[#2b170e] text-[#f0a6a6] border border-[#f0a6a6]/30 text-xs font-bold disabled:opacity-60 cursor-pointer">
+                    <button onClick={() => void moderate(r.id, 'rejected')} disabled={moderating === r.id} aria-label={`Rechazar reseña de ${r.sku}`} className="min-h-[44px] px-3 rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] text-[#b3261e] dark:text-[#f0a6a6] border border-[#b3261e]/30 dark:border-[#f0a6a6]/30 text-xs font-bold disabled:opacity-60 cursor-pointer">
                       Rechazar
                     </button>
                   </div>
@@ -209,19 +209,19 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
             </ul>
           )}
         </div>
-        {errorEs !== null && <p role="alert" className="text-xs text-[#f0a6a6] mb-2">{errorEs}</p>}
-        {okMsg !== null && <p role="status" className="text-xs text-[#a8e6a3] mb-2">{okMsg}</p>}
+        {errorEs !== null && <p role="alert" className="text-xs text-[#b3261e] dark:text-[#f0a6a6] mb-2">{errorEs}</p>}
+        {okMsg !== null && <p role="status" className="text-xs text-[#1e7e34] dark:text-[#a8e6a3] mb-2">{okMsg}</p>}
         <ul className="flex flex-col gap-2">
           {skus.map((sku) => {
             const item = catalog[sku];
             return (
-              <li key={sku} className="flex items-center gap-2 p-2 rounded-xl bg-[#25130b] border border-[#d4af37]/20">
+              <li key={sku} className="flex items-center gap-2 p-2 rounded-xl bg-[#ffffff] dark:bg-[#25130b] border border-[#d4af37]/20">
                 <img src="/images/placeholder.svg" alt={`Foto provisional de ${item.nameEs}`} loading="lazy" className="w-10 h-10 rounded-lg shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-[#fcf8f2] truncate">{item.nameEs}</p>
+                  <p className="text-xs font-bold text-[#2b1a12] dark:text-[#fcf8f2] truncate">{item.nameEs}</p>
                   <div className="flex gap-1.5 mt-1">
-                    <input value={drafts[sku]?.price ?? String(item.priceBOB)} onChange={(e) => setDrafts((d) => ({ ...d, [sku]: { price: e.target.value, stock: drafts[sku]?.stock ?? String(item.stock) } }))} aria-label={`Precio en BOB para ${item.nameEs}`} inputMode="decimal" className="w-20 min-h-[44px] rounded-lg bg-[#120a06] border border-[#d4af37]/20 px-2 text-xs text-[#fcf8f2]" />
-                    <input value={drafts[sku]?.stock ?? String(item.stock)} onChange={(e) => setDrafts((d) => ({ ...d, [sku]: { price: drafts[sku]?.price ?? String(item.priceBOB), stock: e.target.value } }))} aria-label={`Stock para ${item.nameEs}`} inputMode="numeric" className="w-16 min-h-[44px] rounded-lg bg-[#120a06] border border-[#d4af37]/20 px-2 text-xs text-[#fcf8f2]" />
+                    <input value={drafts[sku]?.price ?? String(item.priceBOB)} onChange={(e) => setDrafts((d) => ({ ...d, [sku]: { price: e.target.value, stock: drafts[sku]?.stock ?? String(item.stock) } }))} aria-label={`Precio en BOB para ${item.nameEs}`} inputMode="decimal" className="w-20 min-h-[44px] rounded-lg bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/20 px-2 text-xs text-[#2b1a12] dark:text-[#fcf8f2]" />
+                    <input value={drafts[sku]?.stock ?? String(item.stock)} onChange={(e) => setDrafts((d) => ({ ...d, [sku]: { price: drafts[sku]?.price ?? String(item.priceBOB), stock: e.target.value } }))} aria-label={`Stock para ${item.nameEs}`} inputMode="numeric" className="w-16 min-h-[44px] rounded-lg bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/20 px-2 text-xs text-[#2b1a12] dark:text-[#fcf8f2]" />
                   </div>
                 </div>
                 <button onClick={() => void save(sku)} disabled={saving === sku} aria-label={`Guardar ${item.nameEs}`} className="min-h-[44px] px-3 rounded-xl bg-[#d4af37] text-[#1a0f08] text-xs font-bold disabled:opacity-60 cursor-pointer">{saving === sku ? 'Guardando…' : 'Guardar'}</button>
