@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import confetti from 'canvas-confetti';
 import {
   Rotate3d,
@@ -13,8 +13,7 @@ import {
   Package,
   Layers,
   Scale,
-  Maximize2,
-  Info
+  Maximize2
 } from 'lucide-react';
 import { ProductSpec, ChocolateFactory } from '../types/chocolate';
 import { useCart } from '../contexts/CartContext';
@@ -670,7 +669,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-gradient-to-b from-[#faf6ef] dark:from-[#180b06] via-[#f5ead6] dark:via-[#1f0e08] to-[#eeddc0] dark:to-[#0d0503] select-none flex flex-col md:flex-row">
+    <div className="relative w-full h-screen overflow-hidden bg-gradient-to-b from-[#faf6ef] dark:from-[#180b06] via-[#f5ead6] dark:via-[#1f0e08] to-[#eeddc0] dark:to-[#0d0503] select-none flex flex-col md:flex-row-reverse">
       
       {/* 3D Canvas Area */}
       <div className="relative flex-1 h-full w-full">
@@ -688,7 +687,7 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#fffdf8]/90 dark:bg-[#1c100a]/90 backdrop-blur-md text-xs text-[#8a6216] dark:text-[#e5c158] hover:text-[#2b1a12] hover:dark:text-[#fff] hover:bg-[#f3e7d3] hover:dark:bg-[#2b170e] border border-[#d4af37]/30 transition-all pointer-events-auto cursor-pointer shadow-lg"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Volver a la Sala Real</span>
+            <span>Volver a la Sala</span>
           </button>
 
           {/* Interactive State Badge */}
@@ -757,12 +756,12 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
 
       </div>
 
-      {/* Product Specification & Heritage Card (Side Panel) */}
+      {/* Product Specification & Heritage Card (left side panel, layout intact) */}
       <motion.aside
-        initial={{ opacity: 0, x: 50 }}
+        initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full md:w-[420px] lg:w-[460px] h-auto md:h-full bg-[#fffdf8]/95 dark:bg-[#180c07]/95 backdrop-blur-2xl border-t md:border-t-0 md:border-l border-[#d4af37]/30 p-6 md:p-8 flex flex-col justify-between overflow-y-auto z-20 shadow-2xl shadow-black"
+        className="w-full md:w-[420px] lg:w-[460px] h-auto md:h-full bg-[#fffdf8]/95 dark:bg-[#180c07]/95 backdrop-blur-2xl border-t md:border-t-0 md:border-r border-[#d4af37]/30 p-6 md:p-8 flex flex-col justify-between overflow-y-auto z-20 shadow-2xl shadow-black"
       >
         <div>
           {/* Badge & Factory */}
@@ -836,7 +835,8 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
                   key={i}
                   className="text-xs px-3 py-1 rounded-lg bg-[#efe0c6] dark:bg-[#2e1910] text-[#5c4433] dark:text-[#e6d5c3] border border-[#d4af37]/25 flex items-center gap-1.5"
                 >
-                  <CheckCircle2 className="w-3 h-3 text-[#d4af37]" />
+                  {/* Valid lucide icon (verified export); aria-hidden + shrink-0 keep it from collapsing into a broken glyph. */}
+                  <CheckCircle2 className="w-3 h-3 shrink-0 text-[#d4af37]" aria-hidden="true" />
                   <span>{f}</span>
                 </span>
               ))}
@@ -854,8 +854,8 @@ export const UnwrappingModalView: React.FC<UnwrappingModalViewProps> = ({
 
         </div>
 
-        {/* Footer Actions */}
-        <div className="pt-4 border-t border-[#d4af37]/20 flex flex-col gap-2">
+        {/* Footer Actions: product actions stacked below the info card, same width. */}
+        <div className="pt-4 border-t border-[#d4af37]/20 flex flex-col items-stretch gap-2">
           {/* PR3 overlay add-to-cart (no RAF/scene changes) */}
           <button
             onClick={() => add(commerce.sku, commerce.stock)}

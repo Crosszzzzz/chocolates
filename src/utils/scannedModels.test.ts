@@ -3,9 +3,13 @@ import {
   BAR_LONGEST_CM,
   BAR_SIZE_CM,
   SCANNED_MODELS,
+  SCANNED_USDZ,
   computeScannedModelScale,
   resolveProductScannedModels,
+  resolveProductScannedUsdz,
   resolveScannedModelUrl,
+  resolveScannedUsdzUrl,
+  toggleScannedVariant,
 } from './scannedModels';
 
 describe('resolveScannedModelUrl', () => {
@@ -65,5 +69,51 @@ describe('BAR size constants', () => {
   it('uses the measured 15.0 x 7.2 x 0.8 cm bar', () => {
     expect(BAR_SIZE_CM).toEqual({ lengthCm: 15.0, widthCm: 7.2, thicknessCm: 0.8 });
     expect(BAR_LONGEST_CM).toBe(15.0);
+  });
+});
+
+describe('resolveScannedUsdzUrl', () => {
+  it('percent-encodes the spaces in the folder and file names', () => {
+    expect(resolveScannedUsdzUrl('wrapped')).toBe(
+      '/modelos%20escaneados/barra%20con%20envoltorio.usdz',
+    );
+    expect(resolveScannedUsdzUrl('unwrapped')).toBe(
+      '/modelos%20escaneados/barra%20sin%20envoltorio.usdz',
+    );
+  });
+
+  it('honors a custom base path', () => {
+    expect(resolveScannedUsdzUrl('wrapped', '/assets/scans')).toBe(
+      '/assets/scans/barra%20con%20envoltorio.usdz',
+    );
+  });
+});
+
+describe('SCANNED_USDZ metadata', () => {
+  it('stays in sync with the resolver', () => {
+    expect(SCANNED_USDZ.wrapped.url).toBe(resolveScannedUsdzUrl('wrapped'));
+    expect(SCANNED_USDZ.unwrapped.url).toBe(resolveScannedUsdzUrl('unwrapped'));
+    expect(SCANNED_USDZ.wrapped.bytes).toBeLessThan(SCANNED_USDZ.unwrapped.bytes);
+  });
+});
+
+describe('resolveProductScannedUsdz', () => {
+  it('maps bar products to the wrapped (AR) + unwrapped (3D) USDZ pair', () => {
+    expect(resolveProductScannedUsdz({ type: 'bar' })).toEqual({
+      arIos: 'wrapped',
+      detail3dIos: 'unwrapped',
+    });
+  });
+
+  it('returns null for products with no scanned model', () => {
+    expect(resolveProductScannedUsdz({ type: 'box' })).toBeNull();
+    expect(resolveProductScannedUsdz({})).toBeNull();
+  });
+});
+
+describe('toggleScannedVariant', () => {
+  it('flips wrapped <-> unwrapped', () => {
+    expect(toggleScannedVariant('wrapped')).toBe('unwrapped');
+    expect(toggleScannedVariant('unwrapped')).toBe('wrapped');
   });
 });

@@ -13,7 +13,7 @@ import { RoyalChamberView } from './components/RoyalChamberView';
 import { UnwrappingModalView } from './components/UnwrappingModalView';
 import { ArExperienceView } from './components/ArExperienceView';
 import { TourGuideModal } from './components/TourGuideModal';
-import { toggleAudio, isAudioEnabled, getAudioContext, playIslandDiveChime } from './utils/audio';
+import { toggleAudio, getAudioContext, playIslandDiveChime } from './utils/audio';
 import { initMonitoring } from './lib/monitoring';
 
 // Timed dive: archipelago -> diving -> chamber (matches island camera travel).
@@ -159,16 +159,12 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
   }, [phase]);
 
   // Navbar factory shortcuts (Para Ti / Sucre / Taboada) jump straight to
-  // that factory's product room (Sala Real).
+  // that factory's product room (Sala).
   const handleShortcutFactory = (factory: ChocolateFactory) => {
     clearDiveTimer();
     divingFactoryId.current = null;
     setSelectedProduct(null);
     setCurrentFactory(factory);
-    setPhase('chamber');
-  };
-
-  const handleEnterChamber = () => {
     setPhase('chamber');
   };
 
@@ -227,7 +223,6 @@ export default function App() {  const [currentFactory, setCurrentFactory] = use
         onSelectFactory={handleShortcutFactory}
         factories={FACTORIES}
         onReturnToArchipelago={handleReturnToArchipelago}
-        onGoToChamber={handleEnterChamber}
         onOpenGuide={() => setIsGuideOpen(true)}
         onOpenCart={() => setCartOpen(true)}
         onSearchPick={handleSearchPick}

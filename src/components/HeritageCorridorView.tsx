@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ArrowRight, Quote, ChevronLeft } from 'lucide-react';
@@ -8,13 +8,11 @@ import { useTheme } from '../contexts/ThemeContext';
 
 interface HeritageCorridorViewProps {
   factory: ChocolateFactory;
-  onEnterChamber: () => void;
   onReturnToArchipelago: () => void;
 }
 
 export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
   factory,
-  onEnterChamber,
   onReturnToArchipelago
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -555,7 +553,7 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
         </AnimatePresence>
       </div>
 
-      {/* Floating Scroll Guide at Bottom Center + fixed chamber entry */}
+      {/* Floating Scroll Guide at Bottom Center */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 pointer-events-auto">
 
         {scrollProgress < 0.85 && (
@@ -606,14 +604,9 @@ export const HeritageCorridorView: React.FC<HeritageCorridorViewProps> = ({
           </motion.div>
         )}
 
-        {/* Fixed entry to the product chamber, always visible */}
-        <button
-          onClick={onEnterChamber}
-          className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#8a6216] dark:via-[#f1c40f] to-[#b8860b] text-[#1a0f08] font-extrabold text-sm flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-[#d4af37]/40 cursor-pointer"
-        >
-          <span>Ingresar a la Sala Real de Productos</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
+        {/* Gold chamber CTA removed per visual bug report: the corridor phase is
+            retired (flow goes diving -> chamber) and this component is not
+            mounted. Chamber entry stays via the island dive flow. */}
 
       </div>
 

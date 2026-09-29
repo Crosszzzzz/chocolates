@@ -1351,7 +1351,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
                 Adentrándose en {activeFactory.name}
               </h3>
               <p className="text-sm text-[#8a6216] dark:text-[#e5c158] mt-2 font-serif-luxury italic">
-                Abriendo la Sala Real de Productos...
+                Abriendo la Sala de Productos...
               </p>
             </motion.div>
           </motion.div>

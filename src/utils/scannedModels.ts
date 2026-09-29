@@ -1,8 +1,10 @@
-// Scanned chocolate-bar GLB assets (photogrammetry captures). Two files ship in
+// Scanned chocolate-bar assets (photogrammetry captures). Four files ship in
 // `public/modelos escaneados/` and are shared by every bar product:
 //
 // - wrapped   `chocolate con envoltura.glb`   (~452 KB)  → packaged view + AR
 // - unwrapped `chocolate sin envoltorio.glb`  (~18 MB)   → detail / "desenvolver" 3D
+// - wrapped   `barra con envoltorio.usdz`     (~80 KB)   → iOS Quick Look (AR)
+// - unwrapped `barra sin envoltorio.usdz`     (~2 MB)    → iOS Quick Look (3D)
 //
 // The unwrapped file is heavy on purpose (high-poly scan) and is NEVER loaded
 // eagerly: callers must gate it behind an explicit user action (see `lazy`).
@@ -22,6 +24,17 @@ export const SCANNED_MODEL_FILES = {
 } as const;
 
 export type ScannedModelId = keyof typeof SCANNED_MODEL_FILES;
+
+/** iOS Quick Look assets (same folder as the GLB scans). */
+export const SCANNED_USDZ_FILES = {
+  wrapped: 'barra con envoltorio.usdz',
+  unwrapped: 'barra sin envoltorio.usdz',
+} as const;
+
+export type ScannedUsdzId = keyof typeof SCANNED_USDZ_FILES;
+
+/** Either presentation variant of the scanned bar. */
+export type ScannedVariant = 'wrapped' | 'unwrapped';
 
 export interface ScannedModelMeta {
   id: ScannedModelId;
@@ -50,6 +63,45 @@ export function resolveScannedModelUrl(
   basePath: string = SCANNED_MODEL_BASE_PATH,
 ): string {
   return encodeURI(`${basePath}/${SCANNED_MODEL_FILES[id]}`);
+}
+
+export interface ScannedUsdzMeta {
+  id: ScannedUsdzId;
+  /** Spanish UI label (artifacts are Spanish-facing here). */
+  labelEs: string;
+  /** Percent-encoded URL served by Vite from `public/`. */
+  url: string;
+  /** Approximate file size in bytes (documentation hint). */
+  bytes: number;
+}
+
+/** Percent-encode a scanned USDZ file into a Vite `public/` URL. */
+export function resolveScannedUsdzUrl(
+  id: ScannedUsdzId,
+  basePath: string = SCANNED_MODEL_BASE_PATH,
+): string {
+  return encodeURI(`${basePath}/${SCANNED_USDZ_FILES[id]}`);
+}
+
+/** Static metadata for both USDZ scans; `url` is derived to stay in sync. */
+export const SCANNED_USDZ: Record<ScannedUsdzId, ScannedUsdzMeta> = {
+  wrapped: {
+    id: 'wrapped',
+    labelEs: 'Con envoltura',
+    url: resolveScannedUsdzUrl('wrapped'),
+    bytes: 80275,
+  },
+  unwrapped: {
+    id: 'unwrapped',
+    labelEs: 'Sin envoltorio',
+    url: resolveScannedUsdzUrl('unwrapped'),
+    bytes: 2140444,
+  },
+};
+
+/** Flip the wrapper variant (`wrapped` <-> `unwrapped`) for the live toggle. */
+export function toggleScannedVariant(current: ScannedVariant): ScannedVariant {
+  return current === 'wrapped' ? 'unwrapped' : 'wrapped';
 }
 
 /** Static metadata for both scans; `url` is derived to stay in sync. */
@@ -86,6 +138,24 @@ export function resolveProductScannedModels(product: {
 }): ProductScannedModels | null {
   if (product.type !== 'bar') return null;
   return { ar: 'wrapped', detail3d: 'unwrapped' };
+}
+
+/**
+ * Which scanned USDZ asset a product uses for iOS Quick Look, per
+ * presentation intent. Mirrors `resolveProductScannedModels` so the AR (`ar`)
+ * and 3D (`detail3d`) views each get a matching `ios-src`. Returns null when
+ * the product has no scan yet so the caller keeps its current render.
+ */
+export interface ProductScannedUsdz {
+  arIos: ScannedUsdzId;
+  detail3dIos: ScannedUsdzId;
+}
+
+export function resolveProductScannedUsdz(product: {
+  type?: string;
+}): ProductScannedUsdz | null {
+  if (product.type !== 'bar') return null;
+  return { arIos: 'wrapped', detail3dIos: 'unwrapped' };
 }
 
 /**

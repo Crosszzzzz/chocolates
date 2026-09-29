@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { ChevronLeft } from 'lucide-react';
 import { ChocolateFactory, ProductSpec } from '../types/chocolate';
@@ -17,9 +17,10 @@ interface RoyalChamberViewProps {
 }
 
 /**
- * Sala Real: a lightweight 3D gold-hall ambience behind the redesigned product
- * presentation (`ProductShowcase`). The previous floating procedural meshes are
- * gone — products are now selected from the simple thumbnail + name cards.
+ * Sala: a lightweight 3D gold-hall ambience behind the redesigned product
+ * presentation (`ProductShowcase`). There is no pedestal/base mesh: the cards
+ * float over the scene background. The previous floating procedural meshes are
+ * gone — products are now selected from the boutique photo + name cards.
  */
 export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
   factory,
@@ -31,15 +32,17 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const animationFrameId = useRef<number | null>(null);
+  // True while the right-side detail drawer is open: the Sala content
+  // re-centers in the free space left of the drawer (desktop only).
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const { theme } = useTheme();
 
-  // Live theme handles: fog, floor and hall lights follow the global theme.
+  // Live theme handles: fog and hall lights follow the global theme.
   const sceneRef = useRef<THREE.Scene | null>(null);
   const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
   const overheadLightRef = useRef<THREE.DirectionalLight | null>(null);
   const rimLightRef = useRef<THREE.DirectionalLight | null>(null);
-  const floorMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -80,26 +83,8 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
     scene.add(warmRim);
     rimLightRef.current = warmRim;
 
-    // 3. Grand circular chamber floor
-    const floorGeo = new THREE.CylinderGeometry(8.5, 9, 0.5, 32);
-    const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x1f0e08,
-      roughness: 0.2,
-      metalness: 0.4,
-    });
-    floorMatRef.current = floorMat;
-    const chamberFloor = new THREE.Mesh(floorGeo, floorMat);
-    chamberFloor.position.y = -1.2;
-    scene.add(chamberFloor);
-
-    // Circular gold inlay
-    const inlayGeo = new THREE.RingGeometry(3.2, 3.4, 48);
-    inlayGeo.rotateX(-Math.PI / 2);
-    const inlayMat = new THREE.MeshBasicMaterial({ color: 0xd4af37, side: THREE.DoubleSide });
-    const inlay = new THREE.Mesh(inlayGeo, inlayMat);
-    inlay.position.y = -0.94;
-    scene.add(inlay);
-
+    // 3. No pedestal/base mesh: the product cards float over the scene
+    // background (gradient + glow). Lights stay for future staging.
     // 4. Render loop
     const animate = () => {
       animationFrameId.current = requestAnimationFrame(animate);
@@ -132,7 +117,6 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
     if (scene.fog instanceof THREE.FogExp2) {
       scene.fog.color.set(light ? 0xf3e7d3 : 0x180b06);
     }
-    floorMatRef.current?.color.set(light ? 0xe7d3ae : 0x1f0e08);
     if (ambientLightRef.current) {
       ambientLightRef.current.color.set(light ? 0xfff6e8 : 0xffeedd);
       ambientLightRef.current.intensity = light ? 1.1 : 0.9;
@@ -155,8 +139,10 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
       {/* Atmospheric glow */}
       <div className="pointer-events-none absolute inset-0 bg-radial-[at_50%_35%] from-[#d4af37]/25 via-transparent to-[#c9a86a]/30 dark:from-[#ffd700]/10 dark:to-[#0a0402]/85" />
 
-      {/* Back to islands */}
-      <div className="pointer-events-auto absolute top-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2">
+      {/* Back to islands (centered below the navbar row so it never hides
+          behind the fixed navbar pill; the navbar's own Volver sits in the
+          top row on the left). */}
+      <div className="pointer-events-auto absolute top-[148px] sm:top-[92px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2">
         <button
           onClick={onReturnToArchipelago}
           className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-[#d4af37]/30 bg-[#fffdf8]/80 px-3.5 py-2 text-xs text-[#8a6216] shadow-lg backdrop-blur-md transition-all hover:bg-[#f3e7d3] hover:text-[#2b1a12] dark:bg-[#1c100a]/80 dark:text-[#e5c158] dark:hover:bg-[#2b170e] dark:hover:text-[#fff]"
@@ -166,16 +152,21 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
         </button>
       </div>
 
-      {/* Product presentation */}
-      <div className="absolute inset-0 z-10 overflow-y-auto">
-        <div className="mx-auto w-full max-w-5xl px-4 pt-24 pb-16">
+      {/* Product presentation: on desktop (lg) it reserves the drawer width
+          on the right so title + grid stay centered in the free space. */}
+      <div
+        className={`absolute inset-0 z-10 overflow-y-auto overflow-x-clip transition-[padding] duration-300 ease-out ${detailOpen ? 'lg:pr-[420px]' : 'lg:pr-0'}`}
+      >
+        {/* Top padding clears the fixed navbar row: stacked (Volver above
+            pill) on mobile needs more than the single row on sm+. */}
+        <div className="mx-auto w-full max-w-5xl px-4 pt-48 sm:pt-28 pb-16">
           <p className="mb-1 text-center text-[11px] font-bold uppercase tracking-widest text-[#8a6216] dark:text-[#e5c158]">
             {factory.name}
           </p>
           <h1 className="mb-8 text-center font-serif-luxury text-2xl font-extrabold text-[#2b1a12] sm:text-3xl dark:text-[#fcf8f2]">
-            Sala Real de Productos
+            Sala de Productos
           </h1>
-          <ProductShowcase products={factory.products} onOpenLegacy={onSelectProduct} catalog={catalog} onAdded={onAdded} />
+          <ProductShowcase products={factory.products} onOpenLegacy={onSelectProduct} catalog={catalog} onAdded={onAdded} onDrawerChange={setDetailOpen} />
         </div>
       </div>
     </div>

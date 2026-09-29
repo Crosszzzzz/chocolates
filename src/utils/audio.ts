@@ -63,8 +63,8 @@ export function playFoilTearSound() {
     gain.connect(ctx.destination);
 
     noiseSource.start();
-  } catch (err) {
-    console.debug('Audio playback note:', err);
+  } catch {
+    /* Best-effort audio: silent (no console noise in prod). */
   }
 }
 
@@ -95,8 +95,8 @@ export function playChocolateSnapSound() {
 
     osc.start();
     osc.stop(ctx.currentTime + 0.1);
-  } catch (err) {
-    console.debug('Audio error', err);
+  } catch {
+    /* Best-effort audio: silent (no console noise in prod). */
   }
 }
 
@@ -125,8 +125,8 @@ export function playIslandDiveChime() {
       osc.start(ctx.currentTime + idx * 0.08);
       osc.stop(ctx.currentTime + idx * 0.08 + 1.3);
     });
-  } catch (err) {
-    console.debug('Audio error', err);
+  } catch {
+    /* Best-effort audio: silent (no console noise in prod). */
   }
 }
 
@@ -152,8 +152,8 @@ export function playPedestalHum() {
 
     osc.start();
     osc.stop(ctx.currentTime + 0.35);
-  } catch (err) {
-    console.debug('Audio error', err);
+  } catch {
+    /* Best-effort audio: silent (no console noise in prod). */
   }
 }
 
@@ -184,8 +184,8 @@ export function playIslandSlideSound() {
 
     osc.start();
     osc.stop(ctx.currentTime + 0.3);
-  } catch (err) {
-    console.debug('Audio error', err);
+  } catch {
+    /* Best-effort audio: silent (no console noise in prod). */
   }
 }
 

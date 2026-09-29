@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Crown, Scissors, X, Check, MapPin, Sparkles } from 'lucide-react';
+import { Crown, Scissors, X, Check } from 'lucide-react';
 
 interface TourGuideModalProps {
   isOpen: boolean;
@@ -62,7 +62,7 @@ export const TourGuideModal: React.FC<TourGuideModalProps> = ({ isOpen, onClose 
                 <Crown className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-[#2b1a12] dark:text-[#fcf8f2]">2. Sala Real de Productos</h4>
+                <h4 className="text-sm font-bold text-[#2b1a12] dark:text-[#fcf8f2]">2. Sala de Productos</h4>
                 <p className="text-xs text-[#7a5c48] dark:text-[#a89283] mt-1">
                   Entra directo a la sala: las tabletas descansan flotando sobre pedestales de terciopelo real. Selecciona cualquier barra de chocolate para entrar al modo de inspección.
                 </p>

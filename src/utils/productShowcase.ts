@@ -5,6 +5,17 @@
 import type { ProductSpec } from '../types/chocolate';
 import { resolveProductScannedModels } from './scannedModels';
 
+/** Real product packshot (transparent background) served from `public/`. */
+export const SHOWCASE_PRODUCT_PHOTO_BASE_PATH = '/images';
+export const SHOWCASE_PRODUCT_PHOTO_FILE = 'imagen chocolate sin fondo.png';
+
+/** Percent-encoded URL of the shared product photo for the boutique cards. */
+export function resolveShowcaseProductPhotoUrl(
+  basePath: string = SHOWCASE_PRODUCT_PHOTO_BASE_PATH,
+): string {
+  return encodeURI(`${basePath}/${SHOWCASE_PRODUCT_PHOTO_FILE}`);
+}
+
 export interface ShowcaseCard {
   sku: string;
   name: string;
@@ -14,6 +25,13 @@ export interface ShowcaseCard {
   has3d: boolean;
   /** Miniature palette: wrapper base, cacao tone and accent. */
   thumbnail: { base: string; cacao: string; accent: string };
+  /** Boutique hierarchy: tagline, cacao %, weight and optional badge. */
+  subtitle: string;
+  cacaoPercentage: number;
+  weight: string;
+  badge?: string;
+  /** Shared packshot; the card falls back to `thumbnail` when it fails. */
+  photoUrl: string;
 }
 
 /** Map products onto presentation cards; products without a scan keep no AR/3D. */
@@ -30,16 +48,28 @@ export function buildShowcaseCards(products: ProductSpec[]): ShowcaseCard[] {
         cacao: p.colorHex,
         accent: p.wrapperAccentColor,
       },
+      subtitle: p.subtitle,
+      cacaoPercentage: p.cacaoPercentage,
+      weight: p.weight,
+      badge: p.badge,
+      photoUrl: resolveShowcaseProductPhotoUrl(),
     };
   });
 }
 
 /**
- * Accordion state for the expandable card: clicking the already-open card
- * collapses it, clicking a different card opens that one and closes the rest.
+ * Independent toggle state for the expandable cards: each SKU opens/closes
+ * on its own without affecting the rest. Returns a new Set (never mutates
+ * the input) so React state updates stay immutable.
  */
-export function toggleOpenSku(current: string | null, sku: string): string | null {
-  return current === sku ? null : sku;
+export function toggleOpenSku(current: ReadonlySet<string>, sku: string): Set<string> {
+  const next = new Set(current);
+  if (next.has(sku)) {
+    next.delete(sku);
+  } else {
+    next.add(sku);
+  }
+  return next;
 }
 
 export interface AddToCartButtonState {
