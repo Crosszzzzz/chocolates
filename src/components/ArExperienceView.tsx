@@ -69,6 +69,7 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({ product, onB
         modelUrl={resolveScannedModelUrl(scanned.ar)}
         title={product.name}
         iosSrc={usdzAvailable ? resolveUsdzUrl(product.id) : null}
+        dimensions={product.dimensions}
         onClose={onBackToChamber}
       />
     </div>

@@ -268,6 +268,7 @@ export const ProductShowcase: React.FC<ProductShowcaseProps> = ({ products, onOp
               initialVariant="wrapped"
               poster={assets.photo}
               targetLongestCm={assets.targetLongestCm}
+              dimensions={arProduct.dimensions}
               onClose={() => setArProduct(null)}
             />
           );
@@ -283,6 +284,7 @@ export const ProductShowcase: React.FC<ProductShowcaseProps> = ({ products, onOp
               variantUrls={{ wrappedUrl: assets.wrappedGlb, unwrappedUrl: assets.unwrappedGlb }}
               initialVariant="unwrapped"
               targetLongestCm={assets.targetLongestCm}
+              dimensions={modelProduct.dimensions}
               onClose={() => setModelProduct(null)}
             />
           );

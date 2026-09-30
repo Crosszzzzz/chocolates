@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Package, PackageOpen, ScanLine, Smartphone, X } from 'lucide-react';
 import { loadModelViewer } from '../utils/modelViewerLoader';
 import { loadModelFromUrl } from '../utils/glbProduct';
-import { BAR_LONGEST_CM, toggleScannedVariant, type ScannedVariant } from '../utils/scannedModels';
+import { BAR_LONGEST_CM, BAR_SIZE_CM, toggleScannedVariant, type ScannedVariant } from '../utils/scannedModels';
+import { formatDimensionsLabel } from '../utils/productShowcase';
 
 export interface ArVariantUrls {
   wrappedUrl: string;
@@ -29,14 +30,26 @@ interface ArModelViewProps {
   poster?: string | null;
   /** Real-world longest edge in cm the scan is normalized to. */
   targetLongestCm?: number;
+  /** Product's own `dimensions` string, used for the real-size HUD copy. */
+  dimensions?: string | null;
   onClose: () => void;
 }
 
 type Phase = 'loading' | 'ready' | 'unavailable';
+/** Best-effort scale measurement: never gates the viewer, only the copy. */
+type ScaleState = 'measuring' | 'measured' | 'unverified';
 
 interface ArStatusDetail {
   status?: string;
 }
+
+// Display factor for the AR placement and the inline preview: the model is
+// drawn at 60% of its measured real size so it reads at the same (smaller)
+// size as the showcase thumbnail on phone screens. Applied ONLY at the
+// `scale` prop below: the measurement stays keyed to the real
+// `targetLongestCm`, and scaling both would compound to 0.36 (64% smaller).
+// Quick Look ignores `scale`, so iOS AR keeps its real size (see the notes).
+const AR_SCALE_FACTOR = 0.6;
 
 // The scanned models are small enough for AR (explicit user action), so we
 // measure each once with three to derive the true real-size scale for
@@ -56,12 +69,18 @@ function isIosDevice(): boolean {
   }
 }
 
-async function measureRealScale(url: string, targetLongestCm: number): Promise<number> {
+/**
+ * Measure the GLB once and return the scale that maps its longest edge onto
+ * `targetLongestCm`. Returns `null` when the model cannot be measured
+ * (missing file, parse error or the PRODUCT_MODEL_TIMEOUT_MS budget elapsing
+ * on a 5–15 MB scan) so callers can degrade instead of blocking.
+ */
+async function measureRealScale(url: string, targetLongestCm: number): Promise<number | null> {
   const cacheKey = `${url}@${targetLongestCm}`;
   const cached = scaleCache.get(cacheKey);
   if (cached !== undefined) return cached;
   const loaded = await loadModelFromUrl(url, { targetLongestCm });
-  if (!loaded) return 1;
+  if (!loaded) return null;
   const scale = loaded.scale > 0 && Number.isFinite(loaded.scale) ? loaded.scale : 1;
   loaded.object.traverse((child) => {
     const mesh = child as { isMesh?: boolean; geometry?: { dispose: () => void }; material?: unknown };
@@ -81,10 +100,11 @@ async function measureRealScale(url: string, targetLongestCm: number): Promise<n
 
 /**
  * AR view backed by `<model-viewer>`: detects a real-world surface (`floor`
- * placement) and anchors the bar at true size (`fixed` scale locked to the
- * measured `scale`, so the user cannot deform the 15 x 7.2 x 0.8 cm bar).
- * Degrades gracefully — no WebGL, blocked CDN or missing `.usdz` never yield
- * a broken screen.
+ * placement) and anchors the product at a fixed size (`fixed` scale locked to
+ * the measured `scale` times AR_SCALE_FACTOR, so the user cannot deform the
+ * model). Scale measurement is best-effort and never blocks the screen — see
+ * the effect below. Degrades gracefully: no WebGL, blocked CDN or a
+ * missing/broken `src` never yield a blank screen.
  */
 export const ArModelView: React.FC<ArModelViewProps> = ({
   modelUrl,
@@ -94,15 +114,23 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
   initialVariant = 'wrapped',
   poster,
   targetLongestCm = BAR_LONGEST_CM,
+  dimensions,
   onClose,
 }) => {
   const [phase, setPhase] = useState<Phase>('loading');
   const [scale, setScale] = useState<number>(1);
+  const [scaleState, setScaleState] = useState<ScaleState>('measuring');
   const [variant, setVariant] = useState<ScannedVariant>(initialVariant);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  // Glass hint shown only during an active AR session before placement.
+  const [showArHint, setShowArHint] = useState<boolean>(false);
   const viewerRef = useRef<HTMLElement | null>(null);
 
   const ios = isIosDevice();
+
+  // Real-size copy comes from the product's own dimensions, never a constant.
+  const dimsLabel =
+    formatDimensionsLabel(dimensions) ??
+    `${BAR_SIZE_CM.lengthCm} × ${BAR_SIZE_CM.widthCm} × ${BAR_SIZE_CM.thicknessCm} cm`;
 
   // Active assets: the toggle variant when wired, otherwise the legacy props.
   const activeUrl = variantUrls
@@ -116,39 +144,74 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
       : variantUrls.unwrappedIosSrc
     : iosSrc;
   const quickLookAvailable = !!activeIosSrc;
+  // Quick Look reads meters straight from the USDZ and IGNORES `scale`, so a
+  // GLB scale note on iPhone would be noise rather than information.
+  const showScaleNote = !(ios && quickLookAvailable);
 
+  // The AR screen is ready as soon as `<model-viewer>` can be defined. The
+  // scale measurement is deliberately decoupled: it re-fetches the GLB (the
+  // Para Ti scans are 5–15 MB) and can outlive PRODUCT_MODEL_TIMEOUT_MS, so
+  // it must never hold the modal hostage. On timeout/parse error the model
+  // still renders — at the authored scale (1) plus a visible warning. The
+  // only hard errors left are "model-viewer undefined" and a failed `src`.
   useEffect(() => {
     let alive = true;
     setPhase('loading');
-    setStatusMessage(null);
-    void Promise.all([loadModelViewer(), measureRealScale(activeUrl, targetLongestCm)]).then(([defined, realScale]) => {
-      if (!alive) return;
-      setScale(realScale);
-      setPhase(defined ? 'ready' : 'unavailable');
-    });
+    setShowArHint(false);
+    setScale(1);
+    setScaleState('measuring');
+    void loadModelViewer()
+      .then((defined) => {
+        if (alive) setPhase(defined ? 'ready' : 'unavailable');
+      })
+      .catch(() => {
+        if (alive) setPhase('unavailable');
+      });
+    void measureRealScale(activeUrl, targetLongestCm)
+      .then((realScale) => {
+        if (!alive) return;
+        if (realScale === null) {
+          setScale(1);
+          setScaleState('unverified');
+          return;
+        }
+        setScale(realScale);
+        setScaleState('measured');
+      })
+      .catch(() => {
+        if (!alive) return;
+        setScale(1);
+        setScaleState('unverified');
+      });
     return () => {
       alive = false;
     };
   }, [activeUrl, targetLongestCm]);
 
-  // model-viewer emits `ar-status`; surface failures as a friendly note instead
-  // of letting the native AR attempt fail silently. The `error` event covers
-  // model load failures with the same kind tone.
+  // model-viewer emits `ar-status`; drive the glass surface hint only.
+  // AR failures stay silent in the UI (console.warn) so the inline 3D
+  // preview is never covered. The `error` event is the one hard error:
+  // it means `<model-viewer>` could not load `src`.
   useEffect(() => {
     const el = viewerRef.current;
     if (!el) return;
     const onStatus = (event: Event) => {
       const detail = (event as CustomEvent<ArStatusDetail>).detail;
-      if (detail?.status === 'failed') {
-        setStatusMessage(
-          'No pudimos iniciar la realidad aumentada en este dispositivo. Probá en otra superficie con buena luz o explorá el modelo en 3D.',
-        );
+      const status = detail?.status;
+      if (status === 'session-started') {
+        setShowArHint(true);
+      } else if (status === 'object-placed') {
+        setShowArHint(false);
+      } else if (status === 'failed') {
+        console.warn('[ArModelView] AR session failed to start');
+        setShowArHint(false);
+      } else if (status === 'not-presenting') {
+        // Session ended: hide the hint.
+        setShowArHint(false);
       }
     };
     const onError = () => {
-      setStatusMessage(
-        'No pudimos cargar el modelo para AR. Revisá tu conexión e intentá de nuevo.',
-      );
+      setPhase('unavailable');
     };
     el.addEventListener('ar-status', onStatus as EventListener);
     el.addEventListener('error', onError as EventListener);
@@ -277,28 +340,40 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.28)_0%,transparent_62%)]"
                 />
-                <model-viewer
-                  key={activeUrl}
-                  ref={viewerRef}
-                  src={activeUrl}
-                  {...(quickLookAvailable ? { 'ios-src': activeIosSrc as string } : {})}
-                  {...(poster ? { poster } : {})}
-                  ar={true}
-                  ar-modes="webxr scene-viewer quick-look"
-                  ar-placement="floor"
-                  ar-scale="fixed"
-                  camera-controls={true}
-                  touch-action="pan-y"
-                  shadow-intensity="0.55"
-                  shadow-softness="0.9"
-                  environment-image="neutral"
-                  exposure="1.35"
-                  scale={String(scale)}
-                  interaction-prompt="none"
-                  loading="lazy"
-                  style={{ width: '100%', height: 'clamp(300px, 52dvh, 420px)', backgroundColor: 'transparent' }}
-                />
+                <div style={{ transform: `scale(${AR_SCALE_FACTOR})`, transformOrigin: 'center' }}>
+                  <model-viewer
+                    key={activeUrl}
+                    ref={viewerRef}
+                    src={activeUrl}
+                    {...(quickLookAvailable ? { 'ios-src': activeIosSrc as string } : {})}
+                    {...(poster ? { poster } : {})}
+                    ar={true}
+                    ar-modes="webxr scene-viewer quick-look"
+                    ar-placement="floor"
+                    ar-scale="fixed"
+                    camera-controls={true}
+                    touch-action="pan-y"
+                    shadow-intensity="0.55"
+                    shadow-softness="0.9"
+                    environment-image="neutral"
+                    exposure="1.35"
+                    scale={String(scale * AR_SCALE_FACTOR)}
+                    interaction-prompt="none"
+                    loading="lazy"
+                    style={{ width: '100%', height: 'clamp(300px, 52dvh, 420px)', backgroundColor: 'transparent' }}
+                  />
+                </div>
+                {/* Glass surface hint: visible only during the AR camera session before placement. */}
+                {showArHint && (
+                  <div className="pointer-events-none absolute bottom-16 left-1/2 z-20 w-max max-w-[240px] -translate-x-1/2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-center text-xs text-white backdrop-blur-xl [text-shadow:0_1px_8px_rgba(0,0,0,0.6)] dark:bg-black/20">
+                    Apuntá a una superficie para situar el producto
+                  </div>
+                )}
               </div>
+
+              <p className="mt-2 text-center text-[11px] leading-relaxed text-[#7a5c48] dark:text-[#8e786b]">
+                Vista previa ajustada al tamaño de visualización
+              </p>
 
               {/* Direct camera entry: explicit user gesture jumps to AR. */}
               <button
@@ -310,15 +385,16 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                 Colocar en mi espacio (abrir cámara)
               </button>
 
-              {ios && quickLookAvailable && (
-                <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#d4af37]/30 bg-[#f3e7d3] p-3 text-xs text-[#5c4433] dark:bg-[#2b170e] dark:text-[#e6d5c3]">
-                  <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-[#8a6216] dark:text-[#e5c158]" aria-hidden="true" />
-                  <span>
-                    En iPhone la colocación usa Vista rápida (Quick Look) con la versión{' '}
-                    <span className="font-semibold">.usdz</span> a escala real (15 × 7.2 ×
-                    0.8 cm).
-                  </span>
-                </div>
+              {/* Scale measurement never blocks the view: it only reports. */}
+              {showScaleNote && scaleState !== 'measured' && (
+                <p
+                  role="status"
+                  className="mt-3 rounded-xl border border-[#d4af37]/30 bg-[#fdf6e3] p-3 text-xs text-[#8a6216] dark:bg-[#2b170e] dark:text-[#e5c158]"
+                >
+                  {scaleState === 'measuring'
+                    ? 'Ajustando la escala real del modelo…'
+                    : 'No pudimos verificar la escala exacta de este modelo: se muestra al 60% de su tamaño original (aproximado).'}
+                </p>
               )}
 
               {ios && !quickLookAvailable && (
@@ -335,14 +411,8 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
               {!ios && (
                 <p className="mt-3 text-[11px] leading-relaxed text-[#7a5c48] dark:text-[#8e786b]">
                   Apuntá a una superficie plana con buena luz y tocá el botón de AR para anclar
-                  la barra (15 × 7.2 × 0.8 cm) a escala real. Android usa ARCore (WebXR / Scene
-                  Viewer).
-                </p>
-              )}
-
-              {statusMessage && (
-                <p role="alert" className="mt-3 rounded-xl bg-[#fdecea] p-3 text-xs text-[#b3261e] dark:bg-[#3a1512] dark:text-[#f0a6a6]">
-                  {statusMessage}
+                  el producto (medidas reales {dimsLabel}; se muestra al 60%, igual que la
+                  miniatura). Android usa ARCore (WebXR / Scene Viewer).
                 </p>
               )}
             </>

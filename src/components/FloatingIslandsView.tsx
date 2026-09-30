@@ -217,12 +217,26 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
     scene.fog = new THREE.FogExp2(0x130905, 0.03);
 
     // 2. Camera Setup
+    // Responsive framing: narrow portrait phones (aspect < 0.8, e.g. 360x640)
+    // pull back + widen FOV so the whole island stays in frame with margin.
+    // Desktop (aspect >= 0.8) keeps the original 45 / 8.6 values untouched.
+    const BASE_FOV = 45;
+    const NARROW_FOV = 52;
+    const NARROW_DISTANCE_FACTOR = 1.5;
+    const isNarrowPortrait = (): boolean => {
+      const h = container.clientHeight || 1;
+      return container.clientWidth / h < 0.8;
+    };
     const camera = new THREE.PerspectiveCamera(
-      45,
+      isNarrowPortrait() ? NARROW_FOV : BASE_FOV,
       container.clientWidth / container.clientHeight,
       0.1,
       100
     );
+    if (isNarrowPortrait()) {
+      currentCameraPos.current.set(0, 3.6, 8.6 * NARROW_DISTANCE_FACTOR);
+      targetCameraPos.current.set(0, 3.6, 8.6 * NARROW_DISTANCE_FACTOR);
+    }
     camera.position.copy(currentCameraPos.current);
     cameraRef.current = camera;
 
@@ -980,12 +994,19 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
 
     const handleResize = () => {
       if (!container || !renderer || !camera) return;
+      const aspect = container.clientWidth / (container.clientHeight || 1);
       camera.aspect = container.clientWidth / container.clientHeight;
+      if (aspect < 0.8) {
+        camera.fov = NARROW_FOV;
+      } else {
+        camera.fov = BASE_FOV;
+      }
       camera.updateProjectionMatrix();
       renderer.setSize(container.clientWidth, container.clientHeight);
     };
 
     window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
     container.addEventListener('pointerdown', handlePointerDown);
     container.addEventListener('pointermove', handlePointerMove);
     container.addEventListener('pointerup', handlePointerUp);
@@ -1067,11 +1088,13 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
       // Skipped while diving so the dive zoom targets survive untouched.
       if (!activeFactoryRef.current) {
         const dragInfluence = (liveDragOffsetRef.current / (container.clientWidth || 1000)) * 1.2;
+        const frameAspect = container.clientWidth / (container.clientHeight || 1);
+        const baseZ = frameAspect < 0.8 ? 8.6 * NARROW_DISTANCE_FACTOR : 8.6;
 
         targetCameraPos.current.set(
           mousePos.current.x * 0.6 - dragInfluence,
           3.6 + mousePos.current.y * 0.35,
-          8.6
+          baseZ
         );
 
         targetLookAt.current.set(
@@ -1106,6 +1129,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
         renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
       }
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
       container.removeEventListener('pointerdown', handlePointerDown);
       container.removeEventListener('pointermove', handlePointerMove);
       container.removeEventListener('pointerup', handlePointerUp);

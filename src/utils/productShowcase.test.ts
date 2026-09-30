@@ -4,9 +4,12 @@ import { resolveProductAssets } from '../data/productAssets';
 import {
   addToCartButtonState,
   buildShowcaseCards,
+  formatDimensionsLabel,
   resolveShowcaseProductPhotoUrl,
   toggleOpenSku,
 } from './productShowcase';
+
+const ALL_PRODUCTS = FACTORIES.flatMap((f) => f.products);
 
 describe('buildShowcaseCards', () => {
   it('gives every bar product the AR + 3D actions and its brand palette', () => {
@@ -24,12 +27,36 @@ describe('buildShowcaseCards', () => {
     });
   });
 
-  it('leaves products without a scanned model (boxes) without AR/3D', () => {
+  it('keeps the box without an unwrapped scan off the 3D action', () => {
     const box = FACTORIES[2].products.find((p) => p.type === 'box');
     expect(box).toBeDefined();
     const [card] = buildShowcaseCards([box!]);
-    expect(card.hasAr).toBe(false);
+    expect(card.hasAr).toBe(true);
     expect(card.has3d).toBe(false);
+    expect(card.variantUrls).toBeNull();
+  });
+
+  it('keeps a wrapped-only product on AR without a dead 3D action or toggle', () => {
+    const wrappedOnly = ALL_PRODUCTS.filter(
+      (p) => resolveProductAssets(p.id).unwrappedGlb === null && resolveProductAssets(p.id).wrappedGlb !== null,
+    );
+    expect(wrappedOnly.map((p) => p.id)).toEqual(['sucre-tableta', 'taboada-caja-bombones']);
+    for (const product of wrappedOnly) {
+      const [card] = buildShowcaseCards([product]);
+      expect(card.hasAr).toBe(true);
+      expect(card.has3d).toBe(false);
+      expect(card.variantUrls).toBeNull();
+      expect(card.assets.unwrappedUsdz ?? null).toBeNull();
+    }
+  });
+
+  it('normalizes every product to the longest edge of its dimensions string', () => {
+    const longestEdgeCm = (dimensions: string): number =>
+      Math.max(...(dimensions.match(/\d+(?:\.\d+)?/g) ?? []).map(Number));
+    for (const product of ALL_PRODUCTS) {
+      const assets = resolveProductAssets(product.id);
+      expect(assets.targetLongestCm, product.id).toBeCloseTo(longestEdgeCm(product.dimensions), 5);
+    }
   });
 
   it('carries the boutique hierarchy (subtitle, cacao, weight, badge, photo)', () => {
@@ -41,6 +68,26 @@ describe('buildShowcaseCards', () => {
     expect(card.weight).toBe(bar.weight);
     expect(card.badge).toBe(bar.badge);
     expect(card.photoUrl).toBe(resolveProductAssets(bar.id).photo);
+  });
+});
+
+describe('formatDimensionsLabel', () => {
+  it('drops the estimate note and renders multiplication signs', () => {
+    expect(formatDimensionsLabel('15.0 x 7.5 x 0.8 cm (est.)')).toBe('15 × 7.5 × 0.8 cm');
+  });
+
+  it('trims trailing .0 from every edge', () => {
+    expect(formatDimensionsLabel('22.0 x 16.0 x 5.0 cm (est.)')).toBe('22 × 16 × 5 cm');
+  });
+
+  it('keeps a plain single-edge string as-is', () => {
+    expect(formatDimensionsLabel('12 cm')).toBe('12 cm');
+  });
+
+  it('returns null for missing or blank input', () => {
+    expect(formatDimensionsLabel(null)).toBeNull();
+    expect(formatDimensionsLabel(undefined)).toBeNull();
+    expect(formatDimensionsLabel('   ')).toBeNull();
   });
 });
 

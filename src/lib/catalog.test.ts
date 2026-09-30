@@ -4,7 +4,7 @@ import type { CatalogEntry } from '../data/factories';
 
 const ENTRIES: CatalogEntry[] = [
   { sku: 'parati-70-silvestre', nameEs: 'Barra 70% Cacao Silvestre Amazónico', priceBOB: 45, stock: 24 },
-  { sku: 'sucre-negro-sal-uyuni', nameEs: 'Chocolate Oscuro 75% Flor de Sal de Uyuni', priceBOB: 48, stock: 15 },
+  { sku: 'sucre-tableta', nameEs: 'Tableta de Chocolate con Leche', priceBOB: 16.50, stock: 20 },
 ];
 
 afterEach(() => {
@@ -13,7 +13,7 @@ afterEach(() => {
 
 describe('filterCatalogLocal', () => {
   it('matches name case-insensitively', () => {
-    expect(filterCatalogLocal(ENTRIES, 'uyuni')).toEqual([ENTRIES[1]]);
+    expect(filterCatalogLocal(ENTRIES, 'tableta')).toEqual([ENTRIES[1]]);
     expect(filterCatalogLocal(ENTRIES, 'CACAO')).toEqual([ENTRIES[0]]);
   });
 
@@ -59,6 +59,6 @@ describe('searchCatalog', () => {
         throw new Error(`unexpected fetch: ${u}`);
       }),
     );
-    await expect(searchCatalog('uyuni')).resolves.toEqual({ entries: [ENTRIES[1]], fromDb: false });
+    await expect(searchCatalog('tableta')).resolves.toEqual({ entries: [ENTRIES[1]], fromDb: false });
   });
 });

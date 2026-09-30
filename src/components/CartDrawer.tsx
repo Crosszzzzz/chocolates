@@ -10,7 +10,7 @@ export const CartDrawer: React.FC<Props> = ({ open, catalog, onClose, onCheckout
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Carrito">
       <div className="absolute inset-0 bg-black/40 dark:bg-black/60" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-[#fffdf8] dark:bg-[#1c100a] border border-[#d4af37]/30 rounded-t-2xl sm:rounded-2xl p-5 max-h-[85dvh] overflow-y-auto">
+      <div className="relative w-full sm:max-w-md bg-[#fffdf8] dark:bg-[#1c100a] border border-b-0 sm:border-b border-[#d4af37]/30 rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-h-[85dvh] overflow-x-hidden overflow-y-auto overscroll-contain">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold text-[#2b1a12] dark:text-[#fcf8f2]">Carrito</h2>
           <button onClick={onClose} aria-label="Cerrar carrito" className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] text-[#8a6216] dark:text-[#e5c158] border border-[#d4af37]/25 cursor-pointer"><X className="w-4 h-4" /></button>

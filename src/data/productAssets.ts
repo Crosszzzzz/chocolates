@@ -1,8 +1,8 @@
 // Per-product 3D/AR asset registry (drop-in ready, no new scans).
 //
-// Today all 8 bar products share the photogrammetry captures in
-// `public/modelos escaneados/` and the shared packshot in `public/images/`.
-// The box (`taboada-caja-realeza`) has photo only — no AR/3D yet.
+// Every shipped product owns an explicit entry below; unknown SKUs fall back
+// to the shared photogrammetry captures in `public/modelos escaneados/` and
+// the shared packshot in `public/images/` (see SHARED_PRODUCT_ASSETS).
 //
 // To ship a real per-SKU asset later, edit ONLY this file:
 //   1. Drop `public/modelos/<sku>.glb` (+ optional `.usdz`) and
@@ -43,7 +43,7 @@ export const SHARED_PRODUCT_PHOTO_URL = encodeURI(
   '/images/imagen chocolate sin fondo.png',
 );
 
-/** Shared captures, resolved once so every bar entry stays in sync. */
+/** Shared captures, resolved once so the fallback entries stay in sync. */
 export const SHARED_WRAPPED_GLB = resolveScannedModelUrl('wrapped');
 export const SHARED_UNWRAPPED_GLB = resolveScannedModelUrl('unwrapped');
 export const SHARED_WRAPPED_USDZ = resolveScannedUsdzUrl('wrapped');
@@ -59,35 +59,46 @@ export const SHARED_PRODUCT_ASSETS: ProductAssets = {
   targetLongestCm: BAR_LONGEST_CM,
 };
 
-function barAssets(targetLongestCm: number): ProductAssets {
-  return {
-    photo: SHARED_PRODUCT_PHOTO_URL,
-    wrappedGlb: SHARED_WRAPPED_GLB,
-    unwrappedGlb: SHARED_UNWRAPPED_GLB,
-    wrappedUsdz: SHARED_WRAPPED_USDZ,
-    unwrappedUsdz: SHARED_UNWRAPPED_USDZ,
-    targetLongestCm,
-  };
-}
-
 /**
- * Per-product registry, keyed by `ProductSpec.id`. `targetLongestCm` mirrors
- * `heightCm` from `src/data/factories.ts` so each bar renders at its true
- * packaging size even while sharing the same scan files.
+ * Per-product registry, keyed by `ProductSpec.id`.
+ *
+ * `targetLongestCm` is ALWAYS the LONGEST edge of the `dimensions` string in
+ * `src/data/factories.ts` (never the resting height / thickness): viewers
+ * normalize the bounding box's longest edge onto it, so using `heightCm`
+ * shrank boxes (a 22 cm box rendered at 5 cm).
+ *
+ * iOS Quick Look caveat: `<model-viewer>` `scale` / `ar-scale` are IGNORED by
+ * Quick Look — the `.usdz` is placed using its own meters. Only the GLB path
+ * (Android / WebXR / inline 3D) is normalized here, so every `.usdz` must be
+ * EXPORTED AT REAL METERS by the scan pipeline; a binary USDZ cannot be
+ * corrected from this registry.
  */
 export const PRODUCT_ASSETS: Record<string, ProductAssets> = {
-  'sucre-colonial-canela': barAssets(17.0),
-  'sucre-negro-sal-uyuni': barAssets(16.2),
-  'sucre-nuez-macadamia': barAssets(15.5),
-  'taboada-submarino-puro': barAssets(18.0),
-  'taboada-amargo-almendras': barAssets(16.0),
+  // Wrapped-only drops: no `-sin` scan yet, so `unwrapped*` stay null and the
+  // Con/Sin toggle is hidden (see `buildShowcaseCards` + the AR modal).
+  'sucre-tableta': {
+    photo: encodeURI('/images/sucre-tableta.png'),
+    wrappedGlb: encodeURI('/models/sucre-tableta-con.glb'),
+    unwrappedGlb: null,
+    wrappedUsdz: encodeURI('/models/sucre-tableta-con.usdz'),
+    unwrappedUsdz: null,
+    targetLongestCm: 15.5,
+  },
+  'taboada-caja-bombones': {
+    photo: encodeURI('/images/taboada-caja-bombones.png'),
+    wrappedGlb: encodeURI('/models/taboada-caja-bombones-con.glb'),
+    unwrappedGlb: null,
+    wrappedUsdz: encodeURI('/models/taboada-caja-bombones-con.usdz'),
+    unwrappedUsdz: null,
+    targetLongestCm: 16,
+  },
   'parati-bolsa-fruta': {
     photo: encodeURI('/images/parati-bolsa-fruta.png'),
     wrappedGlb: encodeURI('/models/parati-bolsa-fruta-con.glb'),
     unwrappedGlb: encodeURI('/models/parati-bolsa-fruta-sin.glb'),
     wrappedUsdz: encodeURI('/models/parati-bolsa-fruta-con.usdz'),
     unwrappedUsdz: encodeURI('/models/parati-bolsa-fruta-sin.usdz'),
-    targetLongestCm: 12,
+    targetLongestCm: 18,
   },
   'parati-caja-bombones': {
     photo: encodeURI('/images/parati-caja-bombones.png'),
@@ -95,7 +106,7 @@ export const PRODUCT_ASSETS: Record<string, ProductAssets> = {
     unwrappedGlb: encodeURI('/models/parati-caja-bombones-sin.glb'),
     wrappedUsdz: encodeURI('/models/parati-caja-bombones-con.usdz'),
     unwrappedUsdz: encodeURI('/models/parati-caja-bombones-sin.usdz'),
-    targetLongestCm: 5,
+    targetLongestCm: 24,
   },
   'parati-tableta-coco': {
     photo: encodeURI('/images/parati-tableta-coco.png'),
@@ -103,16 +114,7 @@ export const PRODUCT_ASSETS: Record<string, ProductAssets> = {
     unwrappedGlb: encodeURI('/models/parati-tableta-coco-sin.glb'),
     wrappedUsdz: encodeURI('/models/parati-tableta-coco-con.usdz'),
     unwrappedUsdz: encodeURI('/models/parati-tableta-coco-sin.usdz'),
-    targetLongestCm: 15,
-  },
-  // Box: photo only — nulls keep AR/3D actions hidden until a scan ships.
-  'taboada-caja-realeza': {
-    photo: SHARED_PRODUCT_PHOTO_URL,
-    wrappedGlb: null,
-    unwrappedGlb: null,
-    wrappedUsdz: null,
-    unwrappedUsdz: null,
-    targetLongestCm: 2.2,
+    targetLongestCm: 16,
   },
 };
 

@@ -4,7 +4,7 @@
 
 import type { ProductSpec } from '../types/chocolate';
 import type { ProductAssets } from '../data/productAssets';
-import { resolveProductAssets } from '../data/productAssets';
+import { PRODUCT_ASSETS, resolveProductAssets } from '../data/productAssets';
 import { resolveProductScannedModels } from './scannedModels';
 
 /** Real product packshot (transparent background) served from `public/`. */
@@ -16,6 +16,24 @@ export function resolveShowcaseProductPhotoUrl(
   basePath: string = SHOWCASE_PRODUCT_PHOTO_BASE_PATH,
 ): string {
   return encodeURI(`${basePath}/${SHOWCASE_PRODUCT_PHOTO_FILE}`);
+}
+
+/**
+ * Real-size copy for the AR/3D HUDs, derived from the product's own
+ * `dimensions` string instead of a hard-coded bar size:
+ * `15.0 x 7.5 x 0.8 cm (est.)` → `15 × 7.5 × 0.8 cm`.
+ * Returns null when there is nothing to render so callers can fall back.
+ */
+export function formatDimensionsLabel(dimensions?: string | null): string | null {
+  if (typeof dimensions !== 'string') return null;
+  const cleaned = dimensions
+    .replace(/\s*\((?:est\.|estimado)\)\s*/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (cleaned === '') return null;
+  const parts = cleaned.split(/\s+x\s+/i);
+  const label = parts.length > 1 ? parts.join(' × ') : cleaned;
+  return label.replace(/(\d+)\.0(?=\s|$)/g, '$1');
 }
 
 export interface ShowcaseVariantUrls {
@@ -52,11 +70,21 @@ export interface ShowcaseCard {
 /** Map products onto presentation cards; products without a scan keep no AR/3D.
  * `hasAr`/`has3d` fall back to the per-SKU registry so boxes with real
  * GLB/USDZ assets (e.g. Para Ti bolsa/caja) get AR/3D even though
- * `resolveProductScannedModels` only covers bars. */
+ * `resolveProductScannedModels` only covers bars. A SKU that owns a registry
+ * entry is authoritative, so a wrapped-only product (`unwrappedGlb: null`)
+ * never advertises a 3D action whose modal would open empty. */
 export function buildShowcaseCards(products: ProductSpec[]): ShowcaseCard[] {
   return products.map((p) => {
     const scanned = resolveProductScannedModels(p);
-    const assets = resolveProductAssets(p.id);    const variantUrls: ShowcaseVariantUrls | null =
+    const assets = resolveProductAssets(p.id);
+    const ownsAssets = Object.prototype.hasOwnProperty.call(PRODUCT_ASSETS, p.id);
+    const hasAr = ownsAssets
+      ? assets.wrappedGlb !== null
+      : scanned !== null || assets.wrappedGlb !== null;
+    const has3d = ownsAssets
+      ? assets.unwrappedGlb !== null
+      : scanned !== null || assets.unwrappedGlb !== null;
+    const variantUrls: ShowcaseVariantUrls | null =
       assets.wrappedGlb && assets.unwrappedGlb
         ? {
             wrappedUrl: assets.wrappedGlb,
@@ -68,8 +96,8 @@ export function buildShowcaseCards(products: ProductSpec[]): ShowcaseCard[] {
     return {
       sku: p.id,
       name: p.name,
-      hasAr: scanned !== null || assets.wrappedGlb !== null,
-      has3d: scanned !== null || assets.unwrappedGlb !== null,
+      hasAr,
+      has3d,
       thumbnail: {
         base: p.wrapperPrimaryColor,
         cacao: p.colorHex,

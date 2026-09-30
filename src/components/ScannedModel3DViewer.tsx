@@ -26,8 +26,17 @@ interface ScannedModel3DViewerProps {
   initialVariant?: ScannedVariant;
   /** Real-world longest edge in cm the scan is normalized to. */
   targetLongestCm?: number;
+  /** Kept for API compatibility (currently unused). */
+  dimensions?: string | null;
   onClose: () => void;
 }
+
+// Display factor for the 3D preview: the model is framed at 60% of the
+// default fill so it matches the smaller AR placement and the showcase
+// thumbnail. The auto-fit below derives the camera distance from the
+// bounding radius, which cancels any raw model scaling, so the factor is
+// applied to the framing margin (not to `targetLongestCm`) to be visible.
+const AR_SCALE_FACTOR = 0.6;
 
 /**
  * Orbitable 3D viewer for the scanned bar. Mounted only when the user asks
@@ -162,6 +171,8 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
         // very different scene radii). Exact-fit distance for the bounding
         // sphere is radius / sin(fov/2); the 1.25x margin keeps the silhouette
         // inside the frame on orbit while filling the view without zoom.
+        // Dividing that margin by AR_SCALE_FACTOR renders the model 40%
+        // smaller, matching the AR placement.
         // controls.target follows the sphere center so small products don't
         // sit tiny in the middle. min/maxDistance scale with the fit so
         // close-ups stay allowed but the default already fills the view.
@@ -170,7 +181,8 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
           const sphere = box.getBoundingSphere(new THREE.Sphere());
           const radius = Math.max(sphere.radius, 1e-4);
           const fitDistance =
-            (radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2))) * 1.25;
+            (radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2))) *
+            (1.25 / AR_SCALE_FACTOR);
           const viewDir = new THREE.Vector3(0, 0.21, 1).normalize();
           camera.position.copy(sphere.center).addScaledVector(viewDir, fitDistance);
           camera.near = Math.max(fitDistance / 100, 1e-4);
@@ -250,17 +262,17 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
+      className="fixed inset-0 z-40 flex items-end justify-center px-0 pb-0 pt-[80px] sm:items-center sm:px-6 sm:pb-4 sm:pt-[104px]"
       role="dialog"
       aria-modal="true"
       aria-label={`Vista 3D de ${title}`}
     >
       <div
-        className="absolute inset-0 bg-[#2b1a12]/60 dark:bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-md"
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative z-10 mx-auto flex max-h-[100dvh] w-full max-w-full flex-col overflow-hidden overflow-x-hidden rounded-t-3xl border border-[#d4af37]/30 bg-[#fffdf8] shadow-2xl shadow-black/60 sm:max-h-[92vh] sm:max-w-2xl sm:rounded-3xl dark:bg-[#1c100a]">
+      <div className="relative z-10 mx-auto flex h-[calc(100dvh-72px-1rem)] max-h-[calc(100dvh-72px-1rem)] w-full max-w-full flex-col overflow-hidden overflow-x-hidden rounded-t-3xl border border-[#d4af37]/30 bg-[#fffdf8] shadow-2xl shadow-black/60 sm:h-[calc(100dvh-6rem-1rem)] sm:max-h-[calc(100dvh-6rem-1rem)] sm:max-w-2xl sm:rounded-3xl dark:bg-[#1c100a]">
         <div className="flex items-start justify-between gap-3 border-b border-[#d4af37]/20 p-4 sm:p-5">
           <div className="flex items-start gap-3">
             <Rotate3d className="mt-0.5 h-5 w-5 shrink-0 text-[#d4af37]" aria-hidden="true" />
@@ -281,7 +293,7 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
         {variantUrls && (
           <div className="px-4 pt-4 sm:px-5">
             <div
@@ -319,10 +331,10 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
           </div>
         )}
 
-        <div className="relative">
+        <div className="relative flex min-h-0 flex-1 flex-col">
           <div
             ref={containerRef}
-            className="h-[clamp(300px,52dvh,420px)] w-full bg-[radial-gradient(ellipse_at_center,#fbf3df_0%,#f1e2c0_45%,#dfc084_100%)] dark:bg-[radial-gradient(ellipse_at_center,#38200f_0%,#1d0f07_55%,#0e0503_100%)]"
+            className="min-h-[300px] w-full flex-1 bg-[radial-gradient(ellipse_at_center,#fbf3df_0%,#f1e2c0_45%,#dfc084_100%)] dark:bg-[radial-gradient(ellipse_at_center,#38200f_0%,#1d0f07_55%,#0e0503_100%)]"
           />
           {/* Soft gold glow so the dark bar reads without silhouette washout */}
           <div
@@ -349,10 +361,6 @@ export const ScannedModel3DViewer: React.FC<ScannedModel3DViewerProps> = ({
             </div>
           )}
         </div>
-
-        <p className="p-4 text-[11px] text-[#7a5c48] dark:text-[#8e786b] sm:px-5">
-          Arrastrá para orbitar y pellizcá o usá la rueda para acercar. Escala real 15 × 7.2 × 0.8 cm.
-        </p>
         </div>
       </div>
     </div>
