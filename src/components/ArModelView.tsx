@@ -52,13 +52,6 @@ interface ArStatusDetail {
   status?: string;
 }
 
-// Visual-only preview size: CSS resizing never changes the physical AR size.
-// Shipped GLB/USDZ assets are calibrated in the files themselves because
-// Scene Viewer and Quick Look download them independently of this viewer.
-const VIEW_SCALE_MIN = 30;
-const VIEW_SCALE_MAX = 100;
-const VIEW_SCALE_DEFAULT = 45;
-
 // Grace window before a model-viewer `error` event is trusted: on slow
 // networks the 5–15 MB Draco GLBs can emit a transient error while the decode
 // (or the /draco/*.wasm fetch) is still in flight. Only when the element is
@@ -139,8 +132,6 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
   const [scale, setScale] = useState<number>(1);
   const [scaleState, setScaleState] = useState<ScaleState>('measuring');
   const [variant, setVariant] = useState<ScannedVariant>(initialVariant);
-  // Visual-only preview size (percent), see VIEW_SCALE_* above.
-  const [viewScalePct, setViewScalePct] = useState<number>(VIEW_SCALE_DEFAULT);
   // Glass hint shown only during an active AR session before placement.
   const [showArHint, setShowArHint] = useState<boolean>(false);
   const viewerRef = useRef<HTMLElement | null>(null);
@@ -151,9 +142,6 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ios = isIosDevice();
-
-  // Effective CSS-only preview scale: slider percent → 0.30 … 1.00.
-  const effectiveScale = viewScalePct / 100;
 
   // Real-size copy comes from the product's own dimensions, never a constant.
   const dimsLabel =
@@ -365,6 +353,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
     }
     loadOkRef.current = false;
     if (errorKind === 'viewer') resetModelViewerLoader();
+    // Immediacy: the loader effect also resets on the nonce bump.
     setRetryNonce((n) => n + 1);
   }, [errorKind]);
 
@@ -445,7 +434,9 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
               <button
                 type="button"
                 aria-pressed={variant === 'wrapped'}
-                onClick={() => setVariant('wrapped')}
+                onClick={() => {
+                  setVariant('wrapped');
+                }}
                 className={`flex min-h-[44px] cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-extrabold uppercase tracking-wider transition-all ${
                   variant === 'wrapped'
                     ? 'bg-gradient-to-r from-[#d4af37] via-[#c0392b] to-[#8a6216] text-white shadow-md shadow-[#c0392b]/30'
@@ -458,7 +449,9 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
               <button
                 type="button"
                 aria-pressed={variant === 'unwrapped'}
-                onClick={() => setVariant(toggleScannedVariant(variant))}
+                onClick={() => {
+                  setVariant(toggleScannedVariant(variant));
+                }}
                 className={`flex min-h-[44px] cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-extrabold uppercase tracking-wider transition-all ${
                   variant === 'unwrapped'
                     ? 'bg-gradient-to-r from-[#4a7c2e] via-[#5c3317] to-[#2e4a1a] text-white shadow-md shadow-[#4a7c2e]/30'
@@ -507,16 +500,9 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.28)_0%,transparent_62%)]"
                 />
-                {/* Preview box sized for real: the wrapper height IS the scaled
-                    height (no CSS transform), so no ghost box is left behind
-                    and nothing truncates. The slider only resizes this
-                    on-screen preview — the AR `scale` prop below is untouched. */}
-                <div
-                  style={{
-                    height: `calc(clamp(300px, 52dvh, 420px) * ${effectiveScale})`,
-                    transition: 'height 200ms ease-out',
-                  }}
-                >
+                {/* Fixed natural-size preview box: no visual scaling, so no
+                    ghost box is left behind and nothing truncates. */}
+                <div style={{ height: 'clamp(300px,52dvh,420px)' }}>
                   <model-viewer
                     key={`${activeUrl}:${retryNonce}`}
                     ref={viewerRef}
@@ -545,42 +531,6 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                     Apuntá a una superficie para situar el producto
                   </div>
                 )}
-              </div>
-
-              <p className="mt-2 text-center text-[11px] leading-relaxed text-[#7a5c48] dark:text-[#8e786b]">
-                Vista previa ajustada al tamaño de visualización
-              </p>
-
-              {/* Visual-only preview size slider; never touches the AR scale. */}
-              <div className="mt-3 rounded-2xl border border-[#d4af37]/25 bg-[#f3e7d3]/60 p-3 dark:bg-[#25130b]/70">
-                <div className="flex items-center justify-between gap-3">
-                  <label
-                    htmlFor="ar-view-scale"
-                    className="text-xs font-bold text-[#5c4433] dark:text-[#e6d5c3]"
-                  >
-                    Tamaño de vista
-                  </label>
-                  <span className="text-xs font-extrabold tabular-nums text-[#8a6216] dark:text-[#e5c158]">
-                    {viewScalePct}%
-                  </span>
-                </div>
-                <input
-                  id="ar-view-scale"
-                  type="range"
-                  min={VIEW_SCALE_MIN}
-                  max={VIEW_SCALE_MAX}
-                  step={1}
-                  value={viewScalePct}
-                  onChange={(e) => setViewScalePct(Number(e.target.value))}
-                  aria-describedby="ar-view-scale-hint"
-                  className="mt-2 w-full cursor-pointer accent-[#d4af37]"
-                />
-                <p
-                  id="ar-view-scale-hint"
-                  className="mt-1.5 text-[11px] leading-relaxed text-[#7a5c48] dark:text-[#8e786b]"
-                >
-                  Ajuste visual en pantalla, no afecta el tamaño real en AR
-                </p>
               </div>
 
               {/* Direct camera entry: explicit user gesture jumps to AR. */}
