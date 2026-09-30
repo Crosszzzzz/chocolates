@@ -244,7 +244,15 @@ export async function fetchCatalog(): Promise<{ entries: CatalogEntry[]; fromDb:
     if (!res.ok) throw new Error('db-down');
     const data = (await res.json()) as { products?: CatalogEntry[] };
     if (!Array.isArray(data.products)) throw new Error('bad-shape');
-    return { entries: data.products, fromDb: true };
+    // Merge static 5 with DB rows by sku: the static rows are ALWAYS present
+    // (so all 5 show even when a DB row is missing) and the DB wins price/stock
+    // (admin edits). Unknown DB rows are dropped so legacy SKUs never resurface.
+    const bySku = new Map(data.products.map((p) => [p.sku, p]));
+    const merged = fallback.map((s) => {
+      const db = bySku.get(s.sku);
+      return db ? { ...s, priceBOB: db.priceBOB, stock: db.stock } : s;
+    });
+    return { entries: merged, fromDb: true };
   } catch {
     console.error('No se pudo cargar el catálogo, usando datos locales');
     return { entries: fallback, fromDb: false };

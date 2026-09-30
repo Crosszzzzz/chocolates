@@ -59,6 +59,14 @@ describe('searchCatalog', () => {
         throw new Error(`unexpected fetch: ${u}`);
       }),
     );
-    await expect(searchCatalog('tableta')).resolves.toEqual({ entries: [ENTRIES[1]], fromDb: false });
+    // fetchCatalog always merges the static 5 (legacy DB rows are dropped), so
+    // 'tableta' matches both current tableta SKUs in static order.
+    await expect(searchCatalog('tableta')).resolves.toEqual({
+      entries: [
+        { sku: 'parati-tableta-coco', nameEs: 'Tableta de Cacao (con agregados)', priceBOB: 25, stock: 20 },
+        ENTRIES[1],
+      ],
+      fromDb: false,
+    });
   });
 });

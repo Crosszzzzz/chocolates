@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { X, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { FACTORIES } from '../data/factories';
+import { PRODUCT_ASSETS } from '../data/productAssets';
 import type { CatalogMap } from './CartDrawer';
 // Admin catalog panel (PR5, mvp-completo). Overlay-only, visual-no-op 3D.
 // Gate MVP: VITE_ADMIN_EMAILS allow-list. Future: profiles.is_admin flag.
@@ -73,7 +75,6 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
   }
   useEffect(() => { if (open) { void loadStats(); void loadQueue(); } }, [open]);
   if (user === null || !isAdminEmail(user.email)) return null;
-  const skus = Object.keys(catalog);
   async function save(sku: string): Promise<void> {
     const item = catalog[sku]; if (!item) return;
     const priceRaw = drafts[sku]?.price ?? String(item.priceBOB);
@@ -84,7 +85,7 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
     setSaving(sku); setErrorEs(null); setOkMsg(null);
     try {
       const res = await fetch('/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adminEmail: user?.email, sku, priceBOB, stock }) });
+        body: JSON.stringify({ adminEmail: user?.email, userId: user?.id, sku, priceBOB, stock }) });
       const data = (await res.json()) as { error_es?: string };
       if (!res.ok) { setErrorEs(data.error_es ?? 'No se pudo guardar el cambio'); return }
       setOkMsg(`Guardado ${sku}. Recarga la tienda para ver el cambio.`);
@@ -211,20 +212,33 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
         </div>
         {errorEs !== null && <p role="alert" className="text-xs text-[#b3261e] dark:text-[#f0a6a6] mb-2">{errorEs}</p>}
         {okMsg !== null && <p role="status" className="text-xs text-[#1e7e34] dark:text-[#a8e6a3] mb-2">{okMsg}</p>}
-        <ul className="flex flex-col gap-2">
-          {skus.map((sku) => {
-            const item = catalog[sku];
+        <ul className="flex flex-col gap-3">
+          {FACTORIES.map((factory) => {
+            const items = factory.products.filter((p) => catalog[p.id] !== undefined);
+            if (items.length === 0) return null;
             return (
-              <li key={sku} className="flex items-center gap-2 p-2 rounded-xl bg-[#ffffff] dark:bg-[#25130b] border border-[#d4af37]/20">
-                <img src="/images/placeholder.svg" alt={`Foto provisional de ${item.nameEs}`} loading="lazy" className="w-10 h-10 rounded-lg shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-[#2b1a12] dark:text-[#fcf8f2] truncate">{item.nameEs}</p>
-                  <div className="flex gap-1.5 mt-1">
-                    <input value={drafts[sku]?.price ?? String(item.priceBOB)} onChange={(e) => setDrafts((d) => ({ ...d, [sku]: { price: e.target.value, stock: drafts[sku]?.stock ?? String(item.stock) } }))} aria-label={`Precio en BOB para ${item.nameEs}`} inputMode="decimal" className="w-20 min-h-[44px] rounded-lg bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/20 px-2 text-xs text-[#2b1a12] dark:text-[#fcf8f2]" />
-                    <input value={drafts[sku]?.stock ?? String(item.stock)} onChange={(e) => setDrafts((d) => ({ ...d, [sku]: { price: drafts[sku]?.price ?? String(item.priceBOB), stock: e.target.value } }))} aria-label={`Stock para ${item.nameEs}`} inputMode="numeric" className="w-16 min-h-[44px] rounded-lg bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/20 px-2 text-xs text-[#2b1a12] dark:text-[#fcf8f2]" />
-                  </div>
-                </div>
-                <button onClick={() => void save(sku)} disabled={saving === sku} aria-label={`Guardar ${item.nameEs}`} className="min-h-[44px] px-3 rounded-xl bg-[#d4af37] text-[#1a0f08] text-xs font-bold disabled:opacity-60 cursor-pointer">{saving === sku ? 'Guardando…' : 'Guardar'}</button>
+              <li key={factory.id} className="flex flex-col gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-[#8a6216] dark:text-[#e5c158]">{factory.name}</h3>
+                <ul className="flex flex-col gap-2">
+                  {items.map((p) => {
+                    const sku = p.id;
+                    const item = catalog[sku];
+                    const photo = PRODUCT_ASSETS[sku]?.photo ?? '/images/placeholder.svg';
+                    return (
+                      <li key={sku} className="flex items-center gap-2 p-2 rounded-xl bg-[#ffffff] dark:bg-[#25130b] border border-[#d4af37]/20">
+                        <img src={photo} alt={`Foto de ${item.nameEs}`} loading="lazy" className="w-10 h-10 rounded-lg shrink-0 object-cover" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-[#2b1a12] dark:text-[#fcf8f2] truncate">{item.nameEs}</p>
+                          <div className="flex gap-1.5 mt-1">
+                            <input value={drafts[sku]?.price ?? String(item.priceBOB)} onChange={(e) => setDrafts((d) => ({ ...d, [sku]: { price: e.target.value, stock: drafts[sku]?.stock ?? String(item.stock) } }))} aria-label={`Precio en BOB para ${item.nameEs}`} inputMode="decimal" className="w-20 min-h-[44px] rounded-lg bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/20 px-2 text-xs text-[#2b1a12] dark:text-[#fcf8f2]" />
+                            <input value={drafts[sku]?.stock ?? String(item.stock)} onChange={(e) => setDrafts((d) => ({ ...d, [sku]: { price: drafts[sku]?.price ?? String(item.priceBOB), stock: e.target.value } }))} aria-label={`Stock para ${item.nameEs}`} inputMode="numeric" className="w-16 min-h-[44px] rounded-lg bg-[#faf6ef] dark:bg-[#120a06] border border-[#d4af37]/20 px-2 text-xs text-[#2b1a12] dark:text-[#fcf8f2]" />
+                          </div>
+                        </div>
+                        <button onClick={() => void save(sku)} disabled={saving === sku} aria-label={`Guardar ${item.nameEs}`} className="min-h-[44px] px-3 rounded-xl bg-[#d4af37] text-[#1a0f08] text-xs font-bold disabled:opacity-60 cursor-pointer">{saving === sku ? 'Guardando…' : 'Guardar'}</button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </li>
             );
           })}
