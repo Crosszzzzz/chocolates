@@ -70,7 +70,7 @@ const ProductPhoto: React.FC<{ card: ShowcaseCard }> = ({ card }) => {
       alt={`Foto de ${card.name}`}
       loading="lazy"
       onError={() => setFailed(true)}
-      className="relative z-0 mx-auto h-full max-h-72 w-full max-w-full scale-[1.18] object-contain drop-shadow-[0_10px_16px_rgba(43,26,18,0.25)] transition-transform duration-300 group-hover:scale-[1.25] sm:max-h-80 dark:drop-shadow-[0_10px_16px_rgba(0,0,0,0.55)]"
+      className="relative z-0 h-full w-full scale-[1.18] object-contain drop-shadow-[0_10px_16px_rgba(43,26,18,0.25)] transition-transform duration-300 group-hover:scale-[1.25] dark:drop-shadow-[0_10px_16px_rgba(0,0,0,0.55)]"
     />
   );
 };
@@ -187,7 +187,9 @@ export const ProductShowcase: React.FC<ProductShowcaseProps> = ({ products, onOp
                     </span>
                   )}
                   <span className="flex h-full w-full items-center justify-center px-1 pt-6 pb-1">
-                    <ProductPhoto card={card} />
+                    <span className="block aspect-square w-full">
+                      <ProductPhoto card={card} />
+                    </span>
                   </span>
                 </span>
                 <span className="block min-h-[2.5em] font-serif-luxury text-sm leading-tight font-bold text-[#2b1a12] line-clamp-2 dark:text-[#fcf8f2]">
