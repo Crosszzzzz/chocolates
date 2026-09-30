@@ -12,9 +12,8 @@
 //      and `ProductShowcase` already resolve everything through
 //      `resolveProductAssets(sku)`.
 //
-// Dead infra note: the legacy `/models/<sku>.glb` convention
-// (`glbProduct.ts` / `arExperience.ts`) ships no files and is NOT touched
-// here; this registry is its deprecation path.
+// Product models are calibrated in meters for native AR viewers. Versioned
+// URLs prevent cached, oversized scans from surviving a scale correction.
 
 import {
   BAR_LONGEST_CM,
@@ -67,53 +66,52 @@ export const SHARED_PRODUCT_ASSETS: ProductAssets = {
  * normalize the bounding box's longest edge onto it, so using `heightCm`
  * shrank boxes (a 22 cm box rendered at 5 cm).
  *
- * iOS Quick Look caveat: `<model-viewer>` `scale` / `ar-scale` are IGNORED by
- * Quick Look — the `.usdz` is placed using its own meters. Only the GLB path
- * (Android / WebXR / inline 3D) is normalized here, so every `.usdz` must be
- * EXPORTED AT REAL METERS by the scan pipeline; a binary USDZ cannot be
- * corrected from this registry.
+ * Scene Viewer loads the original GLB and Quick Look loads the USDZ, ignoring
+ * runtime `scale`. Both files must encode the real size; `ar-scale="fixed"`
+ * only prevents user resizing. Wrapped scans match all three package edges;
+ * unwrapped scans keep their proportions at the product's longest edge.
  */
 export const PRODUCT_ASSETS: Record<string, ProductAssets> = {
   // Wrapped-only drops: no `-sin` scan yet, so `unwrapped*` stay null and the
   // Con/Sin toggle is hidden (see `buildShowcaseCards` + the AR modal).
   'sucre-tableta': {
     photo: encodeURI('/images/sucre-tableta.png'),
-    wrappedGlb: encodeURI('/models/sucre-tableta-con.glb'),
+    wrappedGlb: encodeURI('/models/sucre-tableta-con.glb?v=real-scale-1'),
     unwrappedGlb: null,
-    wrappedUsdz: encodeURI('/models/sucre-tableta-con.usdz'),
+    wrappedUsdz: encodeURI('/models/sucre-tableta-con.usdz?v=real-scale-1'),
     unwrappedUsdz: null,
     targetLongestCm: 15.5,
   },
   'taboada-caja-bombones': {
     photo: encodeURI('/images/taboada-caja-bombones.png'),
-    wrappedGlb: encodeURI('/models/taboada-caja-bombones-con.glb'),
+    wrappedGlb: encodeURI('/models/taboada-caja-bombones-con.glb?v=real-scale-1'),
     unwrappedGlb: null,
-    wrappedUsdz: encodeURI('/models/taboada-caja-bombones-con.usdz'),
+    wrappedUsdz: encodeURI('/models/taboada-caja-bombones-con.usdz?v=real-scale-1'),
     unwrappedUsdz: null,
     targetLongestCm: 18,
   },
   'parati-bolsa-fruta': {
     photo: encodeURI('/images/parati-bolsa-fruta.png'),
-    wrappedGlb: encodeURI('/models/parati-bolsa-fruta-con.glb'),
-    unwrappedGlb: encodeURI('/models/parati-bolsa-fruta-sin.glb'),
-    wrappedUsdz: encodeURI('/models/parati-bolsa-fruta-con.usdz'),
-    unwrappedUsdz: encodeURI('/models/parati-bolsa-fruta-sin.usdz'),
+    wrappedGlb: encodeURI('/models/parati-bolsa-fruta-con.glb?v=real-scale-1'),
+    unwrappedGlb: encodeURI('/models/parati-bolsa-fruta-sin.glb?v=real-scale-1'),
+    wrappedUsdz: encodeURI('/models/parati-bolsa-fruta-con.usdz?v=real-scale-1'),
+    unwrappedUsdz: encodeURI('/models/parati-bolsa-fruta-sin.usdz?v=real-scale-1'),
     targetLongestCm: 18,
   },
   'parati-caja-bombones': {
     photo: encodeURI('/images/parati-caja-bombones.png'),
-    wrappedGlb: encodeURI('/models/parati-caja-bombones-con.glb'),
-    unwrappedGlb: encodeURI('/models/parati-caja-bombones-sin.glb'),
-    wrappedUsdz: encodeURI('/models/parati-caja-bombones-con.usdz'),
-    unwrappedUsdz: encodeURI('/models/parati-caja-bombones-sin.usdz'),
+    wrappedGlb: encodeURI('/models/parati-caja-bombones-con.glb?v=real-scale-1'),
+    unwrappedGlb: encodeURI('/models/parati-caja-bombones-sin.glb?v=real-scale-1'),
+    wrappedUsdz: encodeURI('/models/parati-caja-bombones-con.usdz?v=real-scale-1'),
+    unwrappedUsdz: encodeURI('/models/parati-caja-bombones-sin.usdz?v=real-scale-1'),
     targetLongestCm: 18,
   },
   'parati-tableta-coco': {
     photo: encodeURI('/images/parati-tableta-coco.png'),
-    wrappedGlb: encodeURI('/models/parati-tableta-coco-con.glb'),
-    unwrappedGlb: encodeURI('/models/parati-tableta-coco-sin.glb'),
-    wrappedUsdz: encodeURI('/models/parati-tableta-coco-con.usdz'),
-    unwrappedUsdz: encodeURI('/models/parati-tableta-coco-sin.usdz'),
+    wrappedGlb: encodeURI('/models/parati-tableta-coco-con.glb?v=real-scale-1'),
+    unwrappedGlb: encodeURI('/models/parati-tableta-coco-sin.glb?v=real-scale-1'),
+    wrappedUsdz: encodeURI('/models/parati-tableta-coco-con.usdz?v=real-scale-1'),
+    unwrappedUsdz: encodeURI('/models/parati-tableta-coco-sin.usdz?v=real-scale-1'),
     targetLongestCm: 13,
   },
 };

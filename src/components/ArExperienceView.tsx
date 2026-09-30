@@ -1,11 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { ArrowLeft, Box } from 'lucide-react';
 import type { ProductSpec } from '../types/chocolate';
-import {
-  checkUsdzAvailable,
-  resolveUsdzUrl,
-} from '../utils/arExperience';
-import { resolveProductScannedModels, resolveScannedModelUrl } from '../utils/scannedModels';
+import { resolveProductAssets } from '../data/productAssets';
 import { ArModelView } from './ArModelView';
 
 interface ArExperienceViewProps {
@@ -19,26 +15,9 @@ interface ArExperienceViewProps {
  * via `ArModelView`. Products without a scanned model keep a graceful message.
  */
 export const ArExperienceView: React.FC<ArExperienceViewProps> = ({ product, onBackToChamber }) => {
-  const scanned = resolveProductScannedModels(product);
-  const [usdzAvailable, setUsdzAvailable] = useState<boolean>(false);
+  const assets = resolveProductAssets(product.id);
 
-  // iOS Quick Look needs a .usdz sibling; when the file exists the AR view
-  // wires it automatically, otherwise iPhone users get an elegant note.
-  useEffect(() => {
-    let alive = true;
-    void checkUsdzAvailable(resolveUsdzUrl(product.id))
-      .then((ok) => {
-        if (alive) setUsdzAvailable(ok);
-      })
-      .catch(() => {
-        if (alive) setUsdzAvailable(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [product.id]);
-
-  if (!scanned) {
+  if (!assets.wrappedGlb) {
     return (
       <div className="relative flex h-screen w-full items-center justify-center overflow-y-auto bg-gradient-to-b from-[#faf6ef] via-[#f5ead6] to-[#eeddc0] px-4 dark:from-[#180b06] dark:via-[#1f0e08] dark:to-[#0d0503]">
         <div className="w-full max-w-md rounded-2xl border border-[#d4af37]/30 bg-[#fffdf8]/95 p-6 text-center shadow-2xl shadow-black/40 dark:bg-[#1c100a]/95">
@@ -66,9 +45,10 @@ export const ArExperienceView: React.FC<ArExperienceViewProps> = ({ product, onB
   return (
     <div className="relative h-screen w-full bg-gradient-to-b from-[#faf6ef] via-[#f5ead6] to-[#eeddc0] dark:from-[#180b06] dark:via-[#1f0e08] dark:to-[#0d0503]">
       <ArModelView
-        modelUrl={resolveScannedModelUrl(scanned.ar)}
+        modelUrl={assets.wrappedGlb}
         title={product.name}
-        iosSrc={usdzAvailable ? resolveUsdzUrl(product.id) : null}
+        iosSrc={assets.wrappedUsdz ?? null}
+        targetLongestCm={assets.targetLongestCm}
         dimensions={product.dimensions}
         onClose={onBackToChamber}
       />

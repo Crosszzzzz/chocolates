@@ -52,19 +52,9 @@ interface ArStatusDetail {
   status?: string;
 }
 
-// Display factor for the AR placement and the inline preview: the model is
-// drawn at 45% of its measured real size so it reads SMALLER than the real
-// product and closer to the showcase thumbnail on phone screens. Applied ONLY
-// at the `scale` prop below: the measurement stays keyed to the real
-// `targetLongestCm`, and scaling both would compound to 0.2025 (~80% smaller).
-// Quick Look ignores `scale`, so iOS AR keeps its real size (see the notes).
-const AR_SCALE_FACTOR = 0.45;
-
-// Visual-only preview scale slider ("Tamaño de vista"): percentage of the
-// wrapper's CSS transform, replacing the hardcoded AR_SCALE_FACTOR on the
-// wrapper. The default (45%) matches the AR_SCALE_FACTOR behaviour, and it
-// NEVER feeds the `<model-viewer scale>` attribute — AR keeps its automatic
-// real-size placement, so the slider only resizes the on-screen preview.
+// Visual-only preview size: CSS resizing never changes the physical AR size.
+// Shipped GLB/USDZ assets are calibrated in the files themselves because
+// Scene Viewer and Quick Look download them independently of this viewer.
 const VIEW_SCALE_MIN = 30;
 const VIEW_SCALE_MAX = 100;
 const VIEW_SCALE_DEFAULT = 45;
@@ -126,7 +116,7 @@ async function measureRealScale(url: string, targetLongestCm: number): Promise<n
 /**
  * AR view backed by `<model-viewer>`: detects a real-world surface (`floor`
  * placement) and anchors the product at a fixed size (`fixed` scale locked to
- * the measured `scale` times AR_SCALE_FACTOR, so the user cannot deform the
+ * the measured real-world `scale`, so the user cannot deform the
  * model). Scale measurement is best-effort and never blocks the screen — see
  * the effect below. Degrades gracefully: no WebGL, blocked CDN or a
  * missing/broken `src` never yield a blank screen.
@@ -543,7 +533,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                     shadow-softness="0.9"
                     environment-image="neutral"
                     exposure="1.35"
-                    scale={String(scale * AR_SCALE_FACTOR)}
+                    scale={`${scale} ${scale} ${scale}`}
                     interaction-prompt="none"
                     loading="lazy"
                     style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
@@ -611,7 +601,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                 >
                   {scaleState === 'measuring'
                     ? 'Ajustando la escala real del modelo…'
-                    : 'No pudimos verificar la escala exacta de este modelo: se muestra al 45% de su tamaño original (aproximado).'}
+                    : 'No pudimos verificar la escala exacta de este modelo: se usa el tamaño definido en el archivo.'}
                 </p>
               )}
 
@@ -629,8 +619,8 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
               {!ios && (
                 <p className="mt-3 text-[11px] leading-relaxed text-[#7a5c48] dark:text-[#8e786b]">
                   Apuntá a una superficie plana con buena luz y tocá el botón de AR para anclar
-                  el producto (medidas reales {dimsLabel}; se muestra al 45%, igual que la
-                  miniatura). Android usa ARCore (WebXR / Scene Viewer).
+                  el producto (medidas estimadas {dimsLabel}, escala 1:1). Android usa ARCore
+                  (WebXR / Scene Viewer); Windows requiere un dispositivo y navegador compatibles con WebXR.
                 </p>
               )}
             </>
