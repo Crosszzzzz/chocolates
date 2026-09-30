@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Building2, ChevronRight, HelpCircle, LogIn, LogOut, Search, ShieldCheck, ShoppingCart, User, Sun, Moon, ArrowLeft } from 'lucide-react';
 import { ChocolateFactory, RoutePhase } from '../types/chocolate';
@@ -32,10 +32,34 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCart,
   onSearchPick
 }) => {
-  const { user, role, isAdmin, isEmpresa, isLoading, errorEs, signInWithGoogle, signOut } = useAuth();
+  const { user, role, isAdmin, isEmpresa, isLoading, errorEs, signInWithGoogle, signOut, clearError } = useAuth();
   const { count } = useCart();
   const { theme, toggleTheme } = useTheme();
   const [authOpen, setAuthOpen] = useState(false);
+  // Closing the auth dropdown always clears the global auth error so a
+  // reopened form starts clean (local error/loading reset via unmount).
+  const closeAuth = useCallback(() => { setAuthOpen(false); clearError(); }, [clearError]);
+  // A fresh login (email signup/signin success) closes the dropdown.
+  useEffect(() => { if (user) setAuthOpen(false); }, [user]);
+  // Close on any press outside the dropdown + toggle, and on Escape.
+  // Presses inside (Google button, email form) never trigger this:
+  // the closest() guards plus stopPropagation on the panel keep them safe.
+  useEffect(() => {
+    if (!authOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('[data-auth-dropdown]')) return;
+      if (target?.closest?.('[data-auth-toggle]')) return;
+      closeAuth();
+    };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') closeAuth(); };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [authOpen, closeAuth]);
   // Mobile (<md) expandable search: collapsed = magnifier icon button,
   // open = brand animates out and the input fills the freed space.
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -280,6 +304,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="relative shrink-0">
                   <button
                     onClick={() => { closeMobileSearch(); setAuthOpen((v) => !v); }}
+                    data-auth-toggle
                     aria-expanded={authOpen}
                     aria-label="Iniciar sesión"
                     disabled={isLoading}
@@ -290,7 +315,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <span className="hidden sm:inline">{isLoading ? 'Cargando…' : 'Iniciar sesión'}</span>
                   </button>
                   {authOpen && (
-                    <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-[#fffdf8]/95 dark:bg-[#1c100a]/95 border border-[#d4af37]/30 p-3 shadow-2xl shadow-black/70 backdrop-blur-xl" role="dialog" aria-label="Iniciar sesión">
+                    <div data-auth-dropdown onClick={(e) => e.stopPropagation()} className="absolute right-0 mt-2 w-72 rounded-2xl bg-[#fffdf8]/95 dark:bg-[#1c100a]/95 border border-[#d4af37]/30 p-3 shadow-2xl shadow-black/70 backdrop-blur-xl" role="dialog" aria-label="Iniciar sesión">
                       <button
                         onClick={signInWithGoogle}
                         className="w-full min-h-[44px] rounded-xl bg-[#fcf8f2] text-[#1a0f08] text-xs font-bold hover:bg-white transition-colors cursor-pointer flex items-center justify-center gap-1.5"
@@ -303,7 +328,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <span className="text-[10px] uppercase tracking-wide text-[#8a7265]">o con correo</span>
                         <span className="h-px flex-1 bg-[#d4af37]/20" />
                       </div>
-                      <EmailAuthForm onDone={() => setAuthOpen(false)} />
+                      <EmailAuthForm onDone={closeAuth} />
                     </div>
                   )}
                 </div>

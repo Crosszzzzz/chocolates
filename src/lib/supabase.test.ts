@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { isAllowedRedirectUrl, PROD_ORIGIN, parseGoTrueSession, validateEmailCredentials } from './supabase';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isAllowedRedirectUrl, PROD_ORIGIN, parseGoTrueSession, signUpWithEmailPassword, validateEmailCredentials } from './supabase';
 
 describe('isAllowedRedirectUrl', () => {
   it('allows prod origin', () => {
@@ -52,5 +52,83 @@ describe('parseGoTrueSession', () => {
   it('asks for inbox confirmation when signup returns no session', () => {
     expect(() => parseGoTrueSession({ user: { id: 'uid-1' } })).toThrow('Revisa tu correo para confirmar tu cuenta');
     expect(() => parseGoTrueSession({})).toThrow('No se pudo iniciar sesión con correo');
+  });
+});
+
+describe('signUpWithEmailPassword', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  function stubSupabaseEnv(): void {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://x.supabase.co');
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key');
+  }
+
+  function mockFetchSequence(responses: { ok: boolean; status: number; data: unknown }[]): string[] {
+    const urls: string[] = [];
+    let i = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: unknown) => {
+        urls.push(String(url));
+        const r = responses[Math.min(i, responses.length - 1)];
+        i += 1;
+        return { ok: r.ok, status: r.status, json: async () => r.data };
+      }),
+    );
+    return urls;
+  }
+
+  const SESSION = {
+    access_token: 'at',
+    refresh_token: 'rt',
+    expires_in: 3600,
+    user: { id: 'uid-1', email: 'ana@tusitio.bo' },
+  };
+
+  it('returns the signup session directly when confirmation is off', async () => {
+    stubSupabaseEnv();
+    const urls = mockFetchSequence([{ ok: true, status: 200, data: SESSION }]);
+    const session = await signUpWithEmailPassword('ana@tusitio.bo', 'secreta1');
+    expect(session.accessToken).toBe('at');
+    expect(session.user).toEqual({ id: 'uid-1', email: 'ana@tusitio.bo' });
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain('/auth/v1/signup');
+  });
+
+  it('falls back to password sign-in when signup returns no session', async () => {
+    stubSupabaseEnv();
+    const urls = mockFetchSequence([
+      { ok: true, status: 200, data: { user: { id: 'uid-1', email: 'ana@tusitio.bo' } } },
+      { ok: true, status: 200, data: SESSION },
+    ]);
+    const session = await signUpWithEmailPassword('ana@tusitio.bo', 'secreta1');
+    expect(session.accessToken).toBe('at');
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toContain('/auth/v1/signup');
+    expect(urls[1]).toContain('/auth/v1/token');
+  });
+
+  it('surfaces inbox confirmation when sign-in is also unconfirmed', async () => {
+    stubSupabaseEnv();
+    mockFetchSequence([
+      { ok: true, status: 200, data: { user: { id: 'uid-1', email: 'ana@tusitio.bo' } } },
+      { ok: false, status: 400, data: { error: 'invalid_grant', error_description: 'Email not confirmed' } },
+    ]);
+    await expect(signUpWithEmailPassword('ana@tusitio.bo', 'secreta1')).rejects.toThrow(
+      'Revisa tu correo para confirmar tu cuenta',
+    );
+  });
+
+  it('reads OAuth-style error_description for invalid credentials', async () => {
+    stubSupabaseEnv();
+    mockFetchSequence([
+      { ok: false, status: 400, data: { error: 'invalid_grant', error_description: 'Invalid login credentials' } },
+    ]);
+    await expect(signUpWithEmailPassword('ana@tusitio.bo', 'secreta1')).rejects.toThrow(
+      'Correo o contraseña incorrectos',
+    );
   });
 });

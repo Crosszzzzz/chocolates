@@ -75,13 +75,15 @@ export function validateEmailCredentials(email: string, password: string): { ema
   return { email: cleanEmail, password };
 }
 /** Parse a GoTrue session payload; throws Spanish errors (pure, unit-tested via roles/apiMe tests). */
+export const PENDING_CONFIRMATION_ES = 'Revisa tu correo para confirmar tu cuenta';
 export function parseGoTrueSession(data: unknown): EmailSession {
   const body = (typeof data === 'object' && data !== null ? data : {}) as GoTrueSessionResponse;
   const accessToken = typeof body.access_token === 'string' ? body.access_token : '';
-  // Signup with email confirmation returns a user but no session: ask to confirm inbox.
+  // Signup with email confirmation returns a user but no session: caller
+  // (signUpWithEmailPassword) retries a password sign-in before surfacing this.
   if (accessToken === '') {
     const pendingUser = typeof body.user?.id === 'string' ? body.user.id : '';
-    if (pendingUser !== '') throw new Error('Revisa tu correo para confirmar tu cuenta');
+    if (pendingUser !== '') throw new Error(PENDING_CONFIRMATION_ES);
     throw new Error('No se pudo iniciar sesión con correo');
   }
   const id = typeof body.user?.id === 'string' ? body.user.id : '';
@@ -108,19 +110,37 @@ async function postGoTrue(path: string, payload: { email: string; password: stri
   }
   const data: unknown = await res.json().catch(() => null);
   if (!res.ok) {
-    const msg = typeof (data as { msg?: unknown } | null)?.msg === 'string'
-      ? ((data as { msg?: string }).msg as string)
-      : '';
-    if (/invalid login credentials/i.test(msg)) throw new Error('Correo o contraseña incorrectos');
-    if (/already registered|already exists|user already/i.test(msg)) throw new Error('Este correo ya está registrado, inicia sesión');
+    // GoTrue error shape varies by endpoint: /signup uses `msg`, while
+    // /token (OAuth2 grant) uses `error_description`. Read all known fields
+    // so failures never surface as a silent generic message.
+    const body = (typeof data === 'object' && data !== null ? data : {}) as {
+      msg?: unknown;
+      message?: unknown;
+      error_description?: unknown;
+    };
+    const raw = [body.msg, body.message, body.error_description].find(
+      (v): v is string => typeof v === 'string' && v !== '',
+    ) ?? '';
+    if (/invalid login credentials/i.test(raw)) throw new Error('Correo o contraseña incorrectos');
+    if (/already registered|already exists|user already/i.test(raw)) throw new Error('Este correo ya está registrado, inicia sesión');
+    if (/email not confirmed/i.test(raw)) throw new Error(PENDING_CONFIRMATION_ES);
     throw new Error('No se pudo iniciar sesión con correo');
   }
   return parseGoTrueSession(data);
 }
-/** POST /auth/v1/signup (GoTrue REST). */
-export function signUpWithEmailPassword(email: string, password: string): Promise<EmailSession> {
+/** POST /auth/v1/signup (GoTrue REST). Falls back to a password sign-in when
+ * signup returns no session (email confirmation ON: user created, inbox
+ * pending) so a fresh turista is still logged in and the form can close. */
+export async function signUpWithEmailPassword(email: string, password: string): Promise<EmailSession> {
   const creds = validateEmailCredentials(email, password);
-  return postGoTrue('/auth/v1/signup', creds);
+  try {
+    return await postGoTrue('/auth/v1/signup', creds);
+  } catch (error) {
+    if (error instanceof Error && error.message === PENDING_CONFIRMATION_ES) {
+      return postGoTrue('/auth/v1/token?grant_type=password', creds);
+    }
+    throw error;
+  }
 }
 /** POST /auth/v1/token?grant_type=password (GoTrue REST). */
 export function signInWithEmailPassword(email: string, password: string): Promise<EmailSession> {
