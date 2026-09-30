@@ -47,7 +47,7 @@ export function createGltfLoader(): GLTFLoader {
 }
 
 /** Per-product load budget before giving up and keeping the fallback. */
-export const PRODUCT_MODEL_TIMEOUT_MS = 8000;
+export const PRODUCT_MODEL_TIMEOUT_MS = 20000;
 
 /** Minimal loader surface; GLTFLoader satisfies this, mocks implement it. */
 export interface ProductModelLoader {

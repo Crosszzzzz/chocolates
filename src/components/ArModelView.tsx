@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Box, Package, PackageOpen, RotateCcw, ScanLine, Smartphone, X } from 'lucide-react';
 import { loadModelViewer, resetModelViewerLoader } from '../utils/modelViewerLoader';
 import { loadModelFromUrl } from '../utils/glbProduct';
@@ -67,6 +68,13 @@ const AR_SCALE_FACTOR = 0.45;
 const VIEW_SCALE_MIN = 30;
 const VIEW_SCALE_MAX = 100;
 const VIEW_SCALE_DEFAULT = 45;
+
+// Grace window before a model-viewer `error` event is trusted: on slow
+// networks the 5–15 MB Draco GLBs can emit a transient error while the decode
+// (or the /draco/*.wasm fetch) is still in flight. Only when the element is
+// still mounted with the same `src` and still not `loaded` after this budget
+// do we flip to `unavailable`.
+const ERROR_GRACE_MS = 1200;
 
 // The scanned models are small enough for AR (explicit user action), so we
 // measure each once with three to derive the true real-size scale for
@@ -146,6 +154,11 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
   // Glass hint shown only during an active AR session before placement.
   const [showArHint, setShowArHint] = useState<boolean>(false);
   const viewerRef = useRef<HTMLElement | null>(null);
+  // True once the element fired `load` (or reports `loaded`): late `error`
+  // events after this point are spurious and must never show the error card.
+  const loadOkRef = useRef<boolean>(false);
+  // Pending false-error grace timer; always cleared on cleanup/retry/load.
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ios = isIosDevice();
 
@@ -174,13 +187,21 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
   const showScaleNote = !(ios && quickLookAvailable);
 
   // The AR screen is ready as soon as `<model-viewer>` can be defined. The
-  // scale measurement is deliberately decoupled: it re-fetches the GLB (the
-  // Para Ti scans are 5–15 MB) and can outlive PRODUCT_MODEL_TIMEOUT_MS, so
-  // it must never hold the modal hostage. On timeout/parse error the model
-  // still renders — at the authored scale (1) plus a visible warning. The
-  // only hard errors left are "model-viewer undefined" and a failed `src`.
+  // three.js scale measurement is deliberately NOT run here: it re-fetches
+  // the GLB (the Para Ti scans are 5–15 MB) and races model-viewer's own
+  // decode plus the /draco/*.wasm fetch for the decoder — on slow networks
+  // that contention surfaces as a late, bogus `error` event. Measuring is
+  // lazy instead: it runs once, after the element fires `load` (see the
+  // listeners effect below). On timeout/parse error the model still renders
+  // — at the authored scale (1) plus a visible warning. The only hard errors
+  // left are "model-viewer undefined" and a failed `src` past the grace.
   useEffect(() => {
     let alive = true;
+    if (errorTimerRef.current) {
+      clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = null;
+    }
+    loadOkRef.current = false;
     setPhase('loading');
     setErrorKind(null);
     setShowArHint(false);
@@ -203,34 +224,52 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
         setErrorKind('viewer');
         setPhase('unavailable');
       });
-    void measureRealScale(activeUrl, targetLongestCm)
-      .then((realScale) => {
-        if (!alive) return;
-        if (realScale === null) {
-          setScale(1);
-          setScaleState('unverified');
-          return;
-        }
-        setScale(realScale);
-        setScaleState('measured');
-      })
-      .catch(() => {
-        if (!alive) return;
-        setScale(1);
-        setScaleState('unverified');
-      });
     return () => {
       alive = false;
     };
-  }, [activeUrl, targetLongestCm, retryNonce]);
+  }, [activeUrl, retryNonce]);
 
-  // model-viewer emits `ar-status`; drive the glass surface hint only.
-  // AR failures stay silent in the UI (console.warn) so the inline 3D
-  // preview is never covered. The `error` event is the one hard error:
-  // it means `<model-viewer>` could not load `src`.
+  // model-viewer emits `ar-status` and `load`/`error`; drive the glass
+  // surface hint and the lazy scale measurement from them. AR failures stay
+  // silent in the UI (console.warn) so the inline 3D preview is never
+  // covered — a desktop without WebXR keeps `ready` (preview + native AR
+  // button) and only a confirmed `src` load failure shows the error card.
   useEffect(() => {
     const el = viewerRef.current;
     if (!el) return;
+    let alive = true;
+
+    // Best-effort scale: runs ONCE after the decode succeeded, never in
+    // parallel with it, so it cannot contend for the GLB/Draco fetch.
+    const runMeasure = () => {
+      void measureRealScale(activeUrl, targetLongestCm)
+        .then((realScale) => {
+          if (!alive) return;
+          if (realScale === null) {
+            setScale(1);
+            setScaleState('unverified');
+            return;
+          }
+          setScale(realScale);
+          setScaleState('measured');
+        })
+        .catch(() => {
+          if (!alive) return;
+          setScale(1);
+          setScaleState('unverified');
+        });
+    };
+
+    const onLoad = () => {
+      loadOkRef.current = true;
+      // A successful decode cancels any pending false-error grace timer.
+      if (errorTimerRef.current) {
+        clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = null;
+      }
+      runMeasure();
+    };
+
     const onStatus = (event: Event) => {
       const detail = (event as CustomEvent<ArStatusDetail>).detail;
       const status = detail?.status;
@@ -239,6 +278,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
       } else if (status === 'object-placed') {
         setShowArHint(false);
       } else if (status === 'failed') {
+        // No WebXR / user dismissed the AR intent: log and keep `ready`.
         console.warn('[ArModelView] AR session failed to start');
         setShowArHint(false);
       } else if (status === 'not-presenting') {
@@ -246,27 +286,94 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
         setShowArHint(false);
       }
     };
-    const onError = () => {
-      // Element defined but it could not load/decode `src` (network or Draco
-      // decoder). Remounting the element retries the fetch.
-      console.warn('[ArModelView] model-viewer failed to load or decode the model', activeUrl);
-      setErrorKind('model');
-      setPhase('unavailable');
+    interface ModelViewerErrorDetail {
+      type?: unknown;
+      source?: unknown;
+      src?: unknown;
+    }
+    const onError = (event: Event) => {
+      const detail = (event as CustomEvent<ModelViewerErrorDetail>).detail;
+      console.warn('[ArModelView] model-viewer error event', detail, activeUrl);
+      // Ignore poster/environment/thumbnail failures: they carry their own
+      // source and must never take down the model view.
+      const rawType = detail?.type;
+      const errorType = typeof rawType === 'string' ? rawType.toLowerCase() : '';
+      if (
+        errorType.includes('poster') ||
+        errorType.includes('environment') ||
+        errorType.includes('thumbnail')
+      ) {
+        return;
+      }
+      const rawSource = detail?.source ?? detail?.src;
+      if (typeof rawSource === 'string' && rawSource.length > 0) {
+        // Only a failure pointing at the current `src` counts as a model
+        // error; anything else (poster, env map) is ignored.
+        const fileName = activeUrl.split('/').pop() ?? activeUrl;
+        if (
+          !rawSource.includes(activeUrl) &&
+          !rawSource.includes(fileName) &&
+          !activeUrl.includes(rawSource)
+        ) {
+          return;
+        }
+      }
+      // Already decoded fine → this late/duplicate error (slow network,
+      // Draco race) must not flip a working preview into the error card.
+      if (loadOkRef.current) return;
+      // Grace period: give the in-flight decode a chance to finish before
+      // trusting the error. Verified on fire: the element must still be
+      // mounted with the same `src` and still not `loaded`.
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      const failedSrc = activeUrl;
+      errorTimerRef.current = setTimeout(() => {
+        errorTimerRef.current = null;
+        if (!alive || loadOkRef.current) return;
+        const current = viewerRef.current;
+        if (!current) return;
+        if (current.getAttribute('src') !== failedSrc) return;
+        if ((current as unknown as { loaded?: boolean }).loaded) {
+          loadOkRef.current = true;
+          return;
+        }
+        setErrorKind('model');
+        setPhase('unavailable');
+      }, ERROR_GRACE_MS);
     };
+    el.addEventListener('load', onLoad as EventListener);
     el.addEventListener('ar-status', onStatus as EventListener);
     el.addEventListener('error', onError as EventListener);
+    // `load` may have fired before the listeners attached (cached decode):
+    // measure immediately instead of waiting for an event that already ran.
+    try {
+      if ((el as unknown as { loaded?: boolean }).loaded) onLoad();
+    } catch {
+      /* best-effort: the `load` listener still covers the slow path */
+    }
     return () => {
+      alive = false;
+      el.removeEventListener('load', onLoad as EventListener);
       el.removeEventListener('ar-status', onStatus as EventListener);
       el.removeEventListener('error', onError as EventListener);
+      if (errorTimerRef.current) {
+        clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = null;
+      }
     };
-  }, [phase, activeUrl]);
+  }, [phase, activeUrl, retryNonce, targetLongestCm]);
 
   const handleClose = useCallback(() => onClose(), [onClose]);
 
   // "Reintentar": script failures drop the cached loader + failed <script>;
-  // model failures just remount the element. Both bump the nonce so the
-  // loader effect re-runs.
+  // model failures just remount the element (same `src`, bumped key). Both
+  // bump the nonce so the loader effect re-runs. Pending error timers are
+  // dropped so a stale grace cannot kill the fresh attempt.
   const handleRetry = useCallback(() => {
+    if (errorTimerRef.current) {
+      clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = null;
+    }
+    loadOkRef.current = false;
     if (errorKind === 'viewer') resetModelViewerLoader();
     setRetryNonce((n) => n + 1);
   }, [errorKind]);
@@ -291,7 +398,18 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  // The modal lives in a portal on document.body (outside the showcase's
+  // overflow-x-clip ancestors), so lock the background scroll while open.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
       role="dialog"
@@ -303,7 +421,10 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
         onClick={handleClose}
         aria-hidden="true"
       />
-      <div className="relative z-10 mx-auto flex max-h-[100dvh] w-full max-w-full flex-col overflow-hidden overflow-x-hidden rounded-t-3xl border border-[#d4af37]/30 bg-[#fffdf8] shadow-2xl shadow-black/60 sm:max-h-[92vh] sm:max-w-2xl sm:rounded-3xl dark:bg-[#1c100a]">
+      <div
+        className="relative z-10 mx-auto flex max-h-[92vh] w-full max-w-full flex-col overflow-hidden overflow-x-hidden rounded-t-3xl border border-[#d4af37]/30 bg-[#fffdf8] shadow-2xl shadow-black/60 sm:max-w-2xl sm:rounded-3xl dark:bg-[#1c100a]"
+        style={{ maxHeight: '92dvh' }}
+      >
         <div className="flex items-start justify-between gap-3 border-b border-[#d4af37]/20 p-4 sm:p-5">
           <div className="flex items-start gap-3">
             <ScanLine className="mt-0.5 h-5 w-5 shrink-0 text-[#d4af37]" aria-hidden="true" />
@@ -324,7 +445,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-5">
           {variantUrls && (
             <div
               role="group"
@@ -396,8 +517,15 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.28)_0%,transparent_62%)]"
                 />
+                {/* Preview box sized for real: the wrapper height IS the scaled
+                    height (no CSS transform), so no ghost box is left behind
+                    and nothing truncates. The slider only resizes this
+                    on-screen preview — the AR `scale` prop below is untouched. */}
                 <div
-                  style={{ transform: `scale(${effectiveScale})`, transformOrigin: 'center' }}
+                  style={{
+                    height: `calc(clamp(300px, 52dvh, 420px) * ${effectiveScale})`,
+                    transition: 'height 200ms ease-out',
+                  }}
                 >
                   <model-viewer
                     key={`${activeUrl}:${retryNonce}`}
@@ -418,7 +546,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                     scale={String(scale * AR_SCALE_FACTOR)}
                     interaction-prompt="none"
                     loading="lazy"
-                    style={{ width: '100%', height: 'clamp(300px, 52dvh, 420px)', backgroundColor: 'transparent' }}
+                    style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
                   />
                 </div>
                 {/* Glass surface hint: visible only during the AR camera session before placement. */}
@@ -509,6 +637,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };

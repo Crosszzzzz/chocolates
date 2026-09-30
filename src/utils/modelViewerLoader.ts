@@ -103,7 +103,13 @@ export function resetModelViewerLoader(): void {
 
 /** Inject the model-viewer module once and resolve when the element is defined. */
 export function loadModelViewer(): Promise<boolean> {
-  if (loaderPromise) return loaderPromise;
+  if (loaderPromise) {
+    // Re-prime on every cache hit: an HMR swap or a StrictMode remount may
+    // have replaced the element class/global after the first load, dropping
+    // the self-hosted decoder location back to the gstatic default.
+    primeDracoLocation();
+    return loaderPromise;
+  }
   loaderPromise = new Promise<boolean>((resolve) => {
     try {
       if (typeof window === 'undefined' || typeof document === 'undefined') {
