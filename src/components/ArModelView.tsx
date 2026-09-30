@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, Package, PackageOpen, ScanLine, Smartphone, X } from 'lucide-react';
-import { loadModelViewer } from '../utils/modelViewerLoader';
+import { Box, Package, PackageOpen, RotateCcw, ScanLine, Smartphone, X } from 'lucide-react';
+import { loadModelViewer, resetModelViewerLoader } from '../utils/modelViewerLoader';
 import { loadModelFromUrl } from '../utils/glbProduct';
 import { BAR_LONGEST_CM, BAR_SIZE_CM, toggleScannedVariant, type ScannedVariant } from '../utils/scannedModels';
 import { formatDimensionsLabel } from '../utils/productShowcase';
@@ -36,6 +36,14 @@ interface ArModelViewProps {
 }
 
 type Phase = 'loading' | 'ready' | 'unavailable';
+/**
+ * Why the viewer is unavailable, so "Reintentar" can act correctly:
+ * - `viewer`: the model-viewer script was blocked/never defined → drop the
+ *   cached loader promise and re-inject the script.
+ * - `model`: the element defined but failed to load/decode `src` (e.g. the
+ *   Draco decoder fetch) → remount the element so it retries the model.
+ */
+type ErrorKind = 'viewer' | 'model';
 /** Best-effort scale measurement: never gates the viewer, only the copy. */
 type ScaleState = 'measuring' | 'measured' | 'unverified';
 
@@ -44,21 +52,21 @@ interface ArStatusDetail {
 }
 
 // Display factor for the AR placement and the inline preview: the model is
-// drawn at 60% of its measured real size so it reads at the same (smaller)
-// size as the showcase thumbnail on phone screens. Applied ONLY at the
-// `scale` prop below: the measurement stays keyed to the real
-// `targetLongestCm`, and scaling both would compound to 0.36 (64% smaller).
+// drawn at 45% of its measured real size so it reads SMALLER than the real
+// product and closer to the showcase thumbnail on phone screens. Applied ONLY
+// at the `scale` prop below: the measurement stays keyed to the real
+// `targetLongestCm`, and scaling both would compound to 0.2025 (~80% smaller).
 // Quick Look ignores `scale`, so iOS AR keeps its real size (see the notes).
-const AR_SCALE_FACTOR = 0.6;
+const AR_SCALE_FACTOR = 0.45;
 
 // Visual-only preview scale slider ("Tamaño de vista"): percentage of the
 // wrapper's CSS transform, replacing the hardcoded AR_SCALE_FACTOR on the
-// wrapper. The default (60%) matches the previous fixed 0.6 behaviour, and it
+// wrapper. The default (45%) matches the AR_SCALE_FACTOR behaviour, and it
 // NEVER feeds the `<model-viewer scale>` attribute — AR keeps its automatic
 // real-size placement, so the slider only resizes the on-screen preview.
 const VIEW_SCALE_MIN = 30;
 const VIEW_SCALE_MAX = 100;
-const VIEW_SCALE_DEFAULT = 60;
+const VIEW_SCALE_DEFAULT = 45;
 
 // The scanned models are small enough for AR (explicit user action), so we
 // measure each once with three to derive the true real-size scale for
@@ -127,6 +135,9 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
   onClose,
 }) => {
   const [phase, setPhase] = useState<Phase>('loading');
+  const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
+  // Bumped by "Reintentar": re-runs the loader effect and remounts the element.
+  const [retryNonce, setRetryNonce] = useState<number>(0);
   const [scale, setScale] = useState<number>(1);
   const [scaleState, setScaleState] = useState<ScaleState>('measuring');
   const [variant, setVariant] = useState<ScannedVariant>(initialVariant);
@@ -171,15 +182,26 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
   useEffect(() => {
     let alive = true;
     setPhase('loading');
+    setErrorKind(null);
     setShowArHint(false);
     setScale(1);
     setScaleState('measuring');
     void loadModelViewer()
       .then((defined) => {
-        if (alive) setPhase(defined ? 'ready' : 'unavailable');
+        if (!alive) return;
+        if (defined) {
+          setPhase('ready');
+        } else {
+          // Script blocked/offline: the element never defined. Distinct from a
+          // decode failure so "Reintentar" can re-inject the script.
+          setErrorKind('viewer');
+          setPhase('unavailable');
+        }
       })
       .catch(() => {
-        if (alive) setPhase('unavailable');
+        if (!alive) return;
+        setErrorKind('viewer');
+        setPhase('unavailable');
       });
     void measureRealScale(activeUrl, targetLongestCm)
       .then((realScale) => {
@@ -200,7 +222,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
     return () => {
       alive = false;
     };
-  }, [activeUrl, targetLongestCm]);
+  }, [activeUrl, targetLongestCm, retryNonce]);
 
   // model-viewer emits `ar-status`; drive the glass surface hint only.
   // AR failures stay silent in the UI (console.warn) so the inline 3D
@@ -225,6 +247,10 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
       }
     };
     const onError = () => {
+      // Element defined but it could not load/decode `src` (network or Draco
+      // decoder). Remounting the element retries the fetch.
+      console.warn('[ArModelView] model-viewer failed to load or decode the model', activeUrl);
+      setErrorKind('model');
       setPhase('unavailable');
     };
     el.addEventListener('ar-status', onStatus as EventListener);
@@ -236,6 +262,14 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
   }, [phase, activeUrl]);
 
   const handleClose = useCallback(() => onClose(), [onClose]);
+
+  // "Reintentar": script failures drop the cached loader + failed <script>;
+  // model failures just remount the element. Both bump the nonce so the
+  // loader effect re-runs.
+  const handleRetry = useCallback(() => {
+    if (errorKind === 'viewer') resetModelViewerLoader();
+    setRetryNonce((n) => n + 1);
+  }, [errorKind]);
 
   // Direct camera launch: model-viewer requires a user gesture, so this
   // explicit button calls activateAR() to jump straight to the camera.
@@ -344,6 +378,14 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                 No pudimos cargar el visor de realidad aumentada. Revisá tu conexión o abrí el
                 modelo en 3D.
               </p>
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="mt-1 flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-[#d4af37]/40 bg-[#fdf6e3] px-4 py-2.5 text-xs font-extrabold tracking-wider text-[#8a6216] uppercase transition-all hover:bg-[#f3e7d3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8a6216] dark:bg-[#2b170e] dark:text-[#e5c158] dark:hover:bg-[#3a1d10]"
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                Reintentar
+              </button>
             </div>
           )}
 
@@ -358,7 +400,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                   style={{ transform: `scale(${effectiveScale})`, transformOrigin: 'center' }}
                 >
                   <model-viewer
-                    key={activeUrl}
+                    key={`${activeUrl}:${retryNonce}`}
                     ref={viewerRef}
                     src={activeUrl}
                     {...(quickLookAvailable ? { 'ios-src': activeIosSrc as string } : {})}
@@ -441,7 +483,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                 >
                   {scaleState === 'measuring'
                     ? 'Ajustando la escala real del modelo…'
-                    : 'No pudimos verificar la escala exacta de este modelo: se muestra al 60% de su tamaño original (aproximado).'}
+                    : 'No pudimos verificar la escala exacta de este modelo: se muestra al 45% de su tamaño original (aproximado).'}
                 </p>
               )}
 
@@ -459,7 +501,7 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
               {!ios && (
                 <p className="mt-3 text-[11px] leading-relaxed text-[#7a5c48] dark:text-[#8e786b]">
                   Apuntá a una superficie plana con buena luz y tocá el botón de AR para anclar
-                  el producto (medidas reales {dimsLabel}; se muestra al 60%, igual que la
+                  el producto (medidas reales {dimsLabel}; se muestra al 45%, igual que la
                   miniatura). Android usa ARCore (WebXR / Scene Viewer).
                 </p>
               )}
