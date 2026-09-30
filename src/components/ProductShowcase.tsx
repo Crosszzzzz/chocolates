@@ -32,12 +32,12 @@ interface ProductShowcaseProps {
 /** CSS-only chocolate-bar miniature driven by the product's brand palette. */
 const BarThumbnail: React.FC<{ card: ShowcaseCard }> = ({ card }) => (
   <div
-    className="relative mx-auto flex h-24 w-40 items-center justify-center overflow-hidden rounded-xl border shadow-inner"
+    className="relative mx-auto flex h-32 w-52 items-center justify-center overflow-hidden rounded-xl border shadow-inner"
     style={{ backgroundColor: card.thumbnail.base, borderColor: 'rgba(212,175,55,0.5)' }}
     aria-hidden="true"
   >
     <div
-      className="grid h-16 w-24 grid-cols-3 grid-rows-5 gap-[3px] rounded-md p-1"
+      className="grid h-20 w-32 grid-cols-3 grid-rows-5 gap-[3px] rounded-md p-1"
       style={{ backgroundColor: card.thumbnail.cacao }}
     >
       {Array.from({ length: 15 }).map((_, i) => (
@@ -49,7 +49,7 @@ const BarThumbnail: React.FC<{ card: ShowcaseCard }> = ({ card }) => (
       ))}
     </div>
     <span
-      className="absolute bottom-1.5 h-1 w-32 rounded-full opacity-90"
+      className="absolute bottom-1.5 h-1 w-40 rounded-full opacity-90"
       style={{ backgroundColor: card.thumbnail.accent }}
     />
   </div>
@@ -70,7 +70,7 @@ const ProductPhoto: React.FC<{ card: ShowcaseCard }> = ({ card }) => {
       alt={`Foto de ${card.name}`}
       loading="lazy"
       onError={() => setFailed(true)}
-      className="relative z-0 mx-auto h-full max-h-36 w-auto max-w-full object-contain p-1 drop-shadow-[0_10px_16px_rgba(43,26,18,0.25)] transition-transform duration-300 group-hover:scale-[1.04] dark:drop-shadow-[0_10px_16px_rgba(0,0,0,0.55)]"
+      className="relative z-0 mx-auto h-full max-h-72 w-full max-w-full scale-[1.18] object-contain drop-shadow-[0_10px_16px_rgba(43,26,18,0.25)] transition-transform duration-300 group-hover:scale-[1.25] sm:max-h-80 dark:drop-shadow-[0_10px_16px_rgba(0,0,0,0.55)]"
     />
   );
 };
@@ -175,7 +175,7 @@ export const ProductShowcase: React.FC<ProductShowcaseProps> = ({ products, onOp
                 }}
                 className="flex w-full flex-1 cursor-pointer flex-col p-4 pb-3 text-left transition-colors hover:bg-[#f3e7d3]/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8a6216] dark:hover:bg-[#2b170e]/50"
               >
-                <span className="relative mb-3 block aspect-[4/3] w-full overflow-hidden rounded-2xl bg-[radial-gradient(ellipse_at_center,#fbf3e2_0%,#f3e7d3_55%,#e9d4ae_100%)] dark:bg-[radial-gradient(ellipse_at_center,#2b170e_0%,#1c100a_60%,#120906_100%)]">
+                <span className="relative mb-2 block aspect-square w-full overflow-hidden rounded-2xl bg-[radial-gradient(ellipse_at_center,#fbf3e2_0%,#f3e7d3_55%,#e9d4ae_100%)] sm:aspect-[4/5] dark:bg-[radial-gradient(ellipse_at_center,#2b170e_0%,#1c100a_60%,#120906_100%)]">
                   {card.badge && (
                     <span className="absolute top-2 left-2 z-10 max-w-[62%] truncate rounded-full bg-gradient-to-r from-[#d4af37] to-[#b8860b] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#1a0f08] shadow-md">
                       {card.badge}
@@ -186,15 +186,15 @@ export const ProductShowcase: React.FC<ProductShowcaseProps> = ({ products, onOp
                       <ScanLine className="h-3 w-3" aria-hidden="true" /> AR
                     </span>
                   )}
-                  <span className="flex h-full w-full items-center justify-center px-4 pt-10 pb-3">
+                  <span className="flex h-full w-full items-center justify-center px-1 pt-6 pb-1">
                     <ProductPhoto card={card} />
                   </span>
                 </span>
-                <span className="block min-h-[2.6em] font-serif-luxury text-[15px] leading-snug font-bold text-[#2b1a12] line-clamp-2 dark:text-[#fcf8f2]">
+                <span className="block min-h-[2.5em] font-serif-luxury text-sm leading-tight font-bold text-[#2b1a12] line-clamp-2 dark:text-[#fcf8f2]">
                   {card.name}
                 </span>
                 <span
-                  className="mt-0.5 block min-h-[2em] text-xs leading-snug text-[#7a5c48] line-clamp-2 dark:text-[#bda393]"
+                  className="mt-0.5 block min-h-[2em] text-[11px] leading-tight text-[#7a5c48] line-clamp-2 dark:text-[#bda393]"
                   title={card.subtitle}
                 >
                   {card.subtitle}
