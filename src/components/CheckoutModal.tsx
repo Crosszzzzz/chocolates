@@ -18,9 +18,10 @@ export const CheckoutModal: React.FC<Props> = ({ open, catalog, onClose }) => {
   const [errorEs, setErrorEs] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderTotal, setOrderTotal] = useState(0);
+  const [orderItems, setOrderItems] = useState<{ qty: number; name: string }[]>([]);
   const total = useMemo(() => lines.reduce((n, l) => n + (catalog[l.sku]?.priceBOB ?? 0) * l.qty, 0), [lines, catalog]);
   if (!open) return null;
-  const waLink = orderId !== null ? buildWaLink(orderId, orderTotal, fulfillment, address.trim()) : null;
+  const waLink = orderId !== null ? buildWaLink(orderTotal, fulfillment, address.trim(), orderItems) : null;
   async function confirm() {
     setPhase('loading'); setErrorEs(null);
     try {
@@ -28,6 +29,8 @@ export const CheckoutModal: React.FC<Props> = ({ open, catalog, onClose }) => {
         body: JSON.stringify(buildCheckoutBody(lines, fulfillment, address.trim(), total, user?.id)) });
       const data = (await res.json()) as { orderId?: string; totalBOB?: number; error_es?: string };
       if (!res.ok) { setErrorEs(data.error_es ?? 'No se pudo procesar el pedido'); setPhase('form'); return }
+      const snapshot = lines.map((l) => ({ qty: l.qty, name: catalog[l.sku]?.nameEs ?? l.sku }));
+      setOrderItems(snapshot);
       setOrderId(data.orderId ?? ''); setOrderTotal(typeof data.totalBOB === 'number' ? data.totalBOB : total);
       setPhase('done'); clear();
     } catch { setErrorEs('No se pudo procesar el pedido'); setPhase('form') }

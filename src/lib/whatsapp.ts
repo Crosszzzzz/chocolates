@@ -15,8 +15,18 @@ export function whatsappNumber(): string {
   return '59167624420';
 }
 export function formatBOB(n: number): string { return `Bs ${n.toFixed(2)}` }
-export function buildWaLink(orderId: string, totalBOB: number, fulfillment: FulfillmentKind, address?: string): string {
-  const modo = fulfillment === 'pickup' ? 'Recojo en tienda' : `Delivery en Sucre${address ? ` — ${address}` : ''}`;
-  const msg = `Hola, confirmo mi pedido ${orderId} por ${formatBOB(totalBOB)} (${modo}). Pago simulado, sin cargo real.`;
-  return `https://wa.me/${whatsappNumber()}?text=${encodeURIComponent(msg)}`;
+export type WaOrderItem = { qty: number; name: string };
+export function buildWaLink(totalBOB: number, fulfillment: FulfillmentKind, address?: string, items?: WaOrderItem[]): string {
+  const lines: string[] = ['Hola, quiero confirmar mi pedido de chocolates:', ''];
+  const cleanItems = (items ?? []).filter((it) => Number.isInteger(it.qty) && it.qty > 0 && it.name.trim() !== '');
+  if (cleanItems.length > 0) {
+    lines.push('*Detalle del pedido*');
+    for (const it of cleanItems) lines.push(`${it.qty} x ${it.name.trim()}`);
+    lines.push('');
+  }
+  lines.push(`*Total: ${formatBOB(totalBOB)}*`);
+  const entrega = fulfillment === 'pickup' ? 'Recojo en tienda' : `Delivery en Sucre${address?.trim() ? ` — ${address.trim()}` : ''}`;
+  lines.push(`*Entrega: ${entrega}*`);
+  lines.push('Nota: Pago simulado, sin cargo real.');
+  return `https://wa.me/${whatsappNumber()}?text=${encodeURIComponent(lines.join('\n'))}`;
 }
