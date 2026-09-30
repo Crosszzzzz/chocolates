@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { ROLE_LABEL_ES } from '../lib/roles';
-import { EmailAuthForm } from './EmailAuthForm';
 import { SearchBox } from './SearchBox';
 
 interface NavbarProps {
@@ -39,10 +38,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Closing the auth dropdown always clears the global auth error so a
   // reopened form starts clean (local error/loading reset via unmount).
   const closeAuth = useCallback(() => { setAuthOpen(false); clearError(); }, [clearError]);
-  // A fresh login (email signup/signin success) closes the dropdown.
+  // A fresh login (Google success) closes the dropdown.
   useEffect(() => { if (user) setAuthOpen(false); }, [user]);
   // Close on any press outside the dropdown + toggle, and on Escape.
-  // Presses inside (Google button, email form) never trigger this:
+  // Presses inside (Google button) never trigger this:
   // the closest() guards plus stopPropagation on the panel keep them safe.
   useEffect(() => {
     if (!authOpen) return;
@@ -267,7 +266,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
               )}
 
-              {/* Social + email auth (M9): Google session + correo, Spanish strings, no 3D impact */}
+              {/* Google-only auth: direct OAuth, no email form */}
               <button
                 onClick={() => { closeMobileSearch(); onOpenCart(); }}
                 aria-label={count > 0 ? `Abrir carrito, ${count} productos` : 'Abrir carrito'}
@@ -309,7 +308,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     aria-label="Iniciar sesión"
                     disabled={isLoading}
                     className="flex items-center gap-1.5 text-xs px-2 sm:px-2.5 py-1.5 rounded-lg bg-[#d4af37] text-[#1a0f08] font-bold hover:bg-[#8a6216] hover:dark:bg-[#e5c158] border border-[#d4af37] transition-all cursor-pointer disabled:opacity-60"
-                    title={errorEs ?? 'Iniciar sesión con Google o correo'}
+                    title={errorEs ?? 'Iniciar sesión con Google'}
                   >
                     <LogIn className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">{isLoading ? 'Cargando…' : 'Iniciar sesión'}</span>
@@ -323,12 +322,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <LogIn className="w-4 h-4" />
                         Continuar con Google
                       </button>
-                      <div className="flex items-center gap-2 my-2.5" aria-hidden="true">
-                        <span className="h-px flex-1 bg-[#d4af37]/20" />
-                        <span className="text-[10px] uppercase tracking-wide text-[#8a7265]">o con correo</span>
-                        <span className="h-px flex-1 bg-[#d4af37]/20" />
-                      </div>
-                      <EmailAuthForm onDone={closeAuth} />
                     </div>
                   )}
                 </div>
