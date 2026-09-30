@@ -63,7 +63,7 @@ describe('searchCatalog', () => {
     // 'tableta' matches both current tableta SKUs in static order.
     await expect(searchCatalog('tableta')).resolves.toEqual({
       entries: [
-        { sku: 'parati-tableta-coco', nameEs: 'Tableta de Cacao (con agregados)', priceBOB: 25, stock: 20 },
+        { sku: 'parati-tableta-coco', nameEs: 'Tableta con Coco', priceBOB: 25, stock: 20 },
         ENTRIES[1],
       ],
       fromDb: false,

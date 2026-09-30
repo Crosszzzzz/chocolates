@@ -66,7 +66,7 @@ export const FACTORIES: ChocolateFactory[] = [
       },
       {
         id: 'parati-caja-bombones',
-        name: 'Caja de Bombones (Surtido)',
+        name: 'Caja de Bombones',
         subtitle: 'Surtido fino en estuche Para Ti',
         cacaoPercentage: 60,
         weight: '150-250 g',
@@ -83,7 +83,7 @@ export const FACTORIES: ChocolateFactory[] = [
       },
       {
         id: 'parati-tableta-coco',
-        name: 'Tableta de Cacao (con agregados)',
+        name: 'Tableta con Coco',
         subtitle: 'Cacao amazónico con agregados',
         cacaoPercentage: 55,
         weight: '50-100 g',
