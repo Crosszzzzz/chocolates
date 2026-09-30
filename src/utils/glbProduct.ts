@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 // --- M3 GLB loading infra ---
@@ -19,6 +20,32 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 /** Static base path (under `public/`) for per-product GLB assets. */
 export const PRODUCT_MODEL_BASE_PATH = '/models';
 
+/**
+ * Self-hosted Draco decoder (copied from `three/examples/jsm/libs/draco/`).
+ * The optimized GLB scans in `public/` declare `KHR_draco_mesh_compression`,
+ * so every three.js load needs this decoder; self-hosting keeps the 3D viewer
+ * independent from any third-party CDN.
+ */
+export const DRACO_DECODER_PATH = '/draco/';
+
+let sharedLoader: GLTFLoader | null = null;
+
+/**
+ * Shared GLTFLoader with the Draco decoder attached, created once per session
+ * (DRACOLoader spawns its decode worker lazily on first compressed model).
+ * Every caller that loads a shipped GLB must go through this factory — a plain
+ * `new GLTFLoader()` cannot decode Draco and fails on the optimized scans.
+ */
+export function createGltfLoader(): GLTFLoader {
+  if (!sharedLoader) {
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
+    sharedLoader = new GLTFLoader();
+    sharedLoader.setDRACOLoader(dracoLoader);
+  }
+  return sharedLoader;
+}
+
 /** Per-product load budget before giving up and keeping the fallback. */
 export const PRODUCT_MODEL_TIMEOUT_MS = 8000;
 
@@ -30,7 +57,7 @@ export interface ProductModelLoader {
 export interface LoadProductModelOptions {
   /** Real-world product height in cm (from ProductSpec.heightCm). */
   heightCm: number;
-  /** Injectable loader for tests; defaults to a real GLTFLoader. */
+  /** Injectable loader for tests; defaults to the shared Draco-ready loader. */
   loader?: ProductModelLoader;
   /** Override the `/models` base path (tests / alternate hosting). */
   basePath?: string;
@@ -110,7 +137,7 @@ export async function loadProductModel(
 ): Promise<THREE.Object3D | null> {
   const {
     heightCm,
-    loader = new GLTFLoader(),
+    loader = createGltfLoader(),
     basePath = PRODUCT_MODEL_BASE_PATH,
     timeoutMs = PRODUCT_MODEL_TIMEOUT_MS,
   } = options;
@@ -145,7 +172,7 @@ export interface LoadedModel {
 }
 
 export interface LoadModelFromUrlOptions {
-  /** Loader injection for tests; defaults to a real GLTFLoader. */
+  /** Loader injection for tests; defaults to the shared Draco-ready loader. */
   loader?: ProductModelLoader;
   /** Load timeout budget in ms; defaults to PRODUCT_MODEL_TIMEOUT_MS. */
   timeoutMs?: number;
@@ -167,7 +194,7 @@ export async function loadModelFromUrl(
   options: LoadModelFromUrlOptions = {},
 ): Promise<LoadedModel | null> {
   const {
-    loader = new GLTFLoader(),
+    loader = createGltfLoader(),
     timeoutMs = PRODUCT_MODEL_TIMEOUT_MS,
     targetLongestCm,
   } = options;

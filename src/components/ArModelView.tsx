@@ -51,6 +51,15 @@ interface ArStatusDetail {
 // Quick Look ignores `scale`, so iOS AR keeps its real size (see the notes).
 const AR_SCALE_FACTOR = 0.6;
 
+// Visual-only preview scale slider ("Tamaño de vista"): percentage of the
+// wrapper's CSS transform, replacing the hardcoded AR_SCALE_FACTOR on the
+// wrapper. The default (60%) matches the previous fixed 0.6 behaviour, and it
+// NEVER feeds the `<model-viewer scale>` attribute — AR keeps its automatic
+// real-size placement, so the slider only resizes the on-screen preview.
+const VIEW_SCALE_MIN = 30;
+const VIEW_SCALE_MAX = 100;
+const VIEW_SCALE_DEFAULT = 60;
+
 // The scanned models are small enough for AR (explicit user action), so we
 // measure each once with three to derive the true real-size scale for
 // `<model-viewer scale>`. Cached per url to avoid re-measuring on reopen.
@@ -121,11 +130,16 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
   const [scale, setScale] = useState<number>(1);
   const [scaleState, setScaleState] = useState<ScaleState>('measuring');
   const [variant, setVariant] = useState<ScannedVariant>(initialVariant);
+  // Visual-only preview size (percent), see VIEW_SCALE_* above.
+  const [viewScalePct, setViewScalePct] = useState<number>(VIEW_SCALE_DEFAULT);
   // Glass hint shown only during an active AR session before placement.
   const [showArHint, setShowArHint] = useState<boolean>(false);
   const viewerRef = useRef<HTMLElement | null>(null);
 
   const ios = isIosDevice();
+
+  // Effective CSS-only preview scale: slider percent → 0.30 … 1.00.
+  const effectiveScale = viewScalePct / 100;
 
   // Real-size copy comes from the product's own dimensions, never a constant.
   const dimsLabel =
@@ -340,7 +354,9 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.28)_0%,transparent_62%)]"
                 />
-                <div style={{ transform: `scale(${AR_SCALE_FACTOR})`, transformOrigin: 'center' }}>
+                <div
+                  style={{ transform: `scale(${effectiveScale})`, transformOrigin: 'center' }}
+                >
                   <model-viewer
                     key={activeUrl}
                     ref={viewerRef}
@@ -374,6 +390,38 @@ export const ArModelView: React.FC<ArModelViewProps> = ({
               <p className="mt-2 text-center text-[11px] leading-relaxed text-[#7a5c48] dark:text-[#8e786b]">
                 Vista previa ajustada al tamaño de visualización
               </p>
+
+              {/* Visual-only preview size slider; never touches the AR scale. */}
+              <div className="mt-3 rounded-2xl border border-[#d4af37]/25 bg-[#f3e7d3]/60 p-3 dark:bg-[#25130b]/70">
+                <div className="flex items-center justify-between gap-3">
+                  <label
+                    htmlFor="ar-view-scale"
+                    className="text-xs font-bold text-[#5c4433] dark:text-[#e6d5c3]"
+                  >
+                    Tamaño de vista
+                  </label>
+                  <span className="text-xs font-extrabold tabular-nums text-[#8a6216] dark:text-[#e5c158]">
+                    {viewScalePct}%
+                  </span>
+                </div>
+                <input
+                  id="ar-view-scale"
+                  type="range"
+                  min={VIEW_SCALE_MIN}
+                  max={VIEW_SCALE_MAX}
+                  step={1}
+                  value={viewScalePct}
+                  onChange={(e) => setViewScalePct(Number(e.target.value))}
+                  aria-describedby="ar-view-scale-hint"
+                  className="mt-2 w-full cursor-pointer accent-[#d4af37]"
+                />
+                <p
+                  id="ar-view-scale-hint"
+                  className="mt-1.5 text-[11px] leading-relaxed text-[#7a5c48] dark:text-[#8e786b]"
+                >
+                  Ajuste visual en pantalla, no afecta el tamaño real en AR
+                </p>
+              </div>
 
               {/* Direct camera entry: explicit user gesture jumps to AR. */}
               <button
