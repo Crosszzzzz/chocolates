@@ -35,6 +35,24 @@
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    min-height: 100vh;
+  }
+
+  @supports (height: 100dvh) {
+    html,
+    body,
+    #root {
+      min-height: 100dvh;
+    }
+  }
+
+  body {
+    overscroll-behavior-y: none;
+  }
+
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   }

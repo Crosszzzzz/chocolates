@@ -1177,7 +1177,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   // Graceful 2D fallback: factory navigation stays usable without WebGL.
   if (webglError !== null) {
     return (
-      <div className="relative w-full h-screen overflow-y-auto bg-[#faf6ef] dark:bg-[#120a06] px-6 py-16 text-center">
+      <div className="relative w-full h-screen supports-[height:100dvh]:h-[100dvh] overflow-y-auto overscroll-contain bg-[#faf6ef] dark:bg-[#120a06] px-6 py-16 text-center">
         <h2 className="text-2xl font-bold text-[#2b1a12] dark:text-[#fcf8f2]">3D unavailable, the tour continues</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-[#5c4433] dark:text-[#d7c4b7]">
           Your browser blocked WebGL ({webglError}). Pick a factory below to continue.
@@ -1199,7 +1199,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
   }
 
   return (
-      <div className="relative w-full h-screen overflow-hidden bg-[radial-gradient(ellipse_at_center,#fdf8ec_0%,#f7ecd4_45%,#efddba_75%,#e6cfa4_100%)] dark:bg-[radial-gradient(ellipse_at_center,#6e3c12_0%,#3d1e08_38%,#180b04_68%,#070302_100%)] select-none">
+      <div className="relative w-full h-screen supports-[height:100dvh]:h-[100dvh] overflow-hidden overscroll-none bg-[radial-gradient(ellipse_at_center,#fdf8ec_0%,#f7ecd4_45%,#efddba_75%,#e6cfa4_100%)] dark:bg-[radial-gradient(ellipse_at_center,#6e3c12_0%,#3d1e08_38%,#180b04_68%,#070302_100%)] select-none">
       
       {/* 3D Canvas Mount Point with Touch Action None to enable smooth touch dragging */}
       <div
@@ -1237,7 +1237,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 15, scale: 0.96 }}
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute bottom-8 sm:bottom-10 md:bottom-12 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
+              className="absolute bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1rem))] sm:bottom-[max(2.5rem,calc(env(safe-area-inset-bottom)+1.5rem))] md:bottom-[max(3rem,calc(env(safe-area-inset-bottom)+2rem))] left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
             >
               <div className="bg-[#fffdf8]/92 dark:bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl px-4 py-2 flex items-center justify-between gap-2 sm:gap-3 shadow-2xl shadow-black/90">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -1288,7 +1288,7 @@ export const FloatingIslandsView: React.FC<FloatingIslandsViewProps> = ({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 15, scale: 0.96 }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute bottom-8 sm:bottom-10 md:bottom-12 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
+            className="absolute bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1rem))] sm:bottom-[max(2.5rem,calc(env(safe-area-inset-bottom)+1.5rem))] md:bottom-[max(3rem,calc(env(safe-area-inset-bottom)+2rem))] left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-lg pointer-events-auto"
           >
             <div className="bg-[#fffdf8]/92 dark:bg-[#1c100a]/92 backdrop-blur-2xl border border-[#d4af37]/45 rounded-2xl p-4 sm:p-5 shadow-2xl shadow-black/90">
               

@@ -129,7 +129,7 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
   }, [theme]);
 
   return (
-    <div className="relative h-screen w-full select-none overflow-hidden bg-gradient-to-b from-[#faf6ef] via-[#f5ead6] to-[#eeddc0] dark:from-[#1c0d07] dark:via-[#241209] dark:to-[#0e0503]">
+    <div className="relative h-screen supports-[height:100dvh]:h-[100dvh] w-full select-none overflow-hidden overscroll-none bg-gradient-to-b from-[#faf6ef] via-[#f5ead6] to-[#eeddc0] dark:from-[#1c0d07] dark:via-[#241209] dark:to-[#0e0503]">
       {/* 3D hall ambience */}
       <div ref={containerRef} className="absolute inset-0" />
 
@@ -139,11 +139,11 @@ export const RoyalChamberView: React.FC<RoyalChamberViewProps> = ({
       {/* Product presentation: on desktop (lg) it reserves the drawer width
           on the right so title + grid stay centered in the free space. */}
       <div
-        className={`absolute inset-0 z-10 overflow-y-auto overflow-x-clip transition-[padding] duration-300 ease-out ${detailOpen ? 'lg:pr-[420px]' : 'lg:pr-0'}`}
+        className={`absolute inset-0 z-10 overflow-y-auto overflow-x-clip overscroll-contain transition-[padding] duration-300 ease-out ${detailOpen ? 'lg:pr-[420px]' : 'lg:pr-0'}`}
       >
         {/* Top padding clears the fixed navbar row: stacked (Volver above
             pill) on mobile needs more than the single row on sm+. */}
-        <div className="mx-auto w-full max-w-5xl px-4 pt-48 sm:pt-28 pb-16">
+        <div className="mx-auto w-full max-w-5xl px-4 pt-48 sm:pt-28 pb-[calc(4rem+env(safe-area-inset-bottom))]">
           <p className="mb-1 text-center text-[11px] font-bold uppercase tracking-widest text-[#8a6216] dark:text-[#e5c158]">
             {factory.name}
           </p>

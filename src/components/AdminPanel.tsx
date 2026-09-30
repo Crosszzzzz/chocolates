@@ -94,7 +94,7 @@ export const AdminPanel: React.FC<{ catalog: CatalogMap }> = ({ catalog }) => {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)} aria-label="Abrir administración"
-        className="fixed bottom-4 right-4 z-[65] min-h-[44px] px-4 flex items-center gap-2 rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] text-[#8a6216] dark:text-[#e5c158] border border-[#d4af37]/30 text-xs font-bold cursor-pointer">
+        className="fixed z-40 top-[max(5rem,calc(env(safe-area-inset-top)+4.5rem))] right-3 sm:right-4 min-h-[44px] px-4 flex items-center gap-2 rounded-xl bg-[#f3e7d3] dark:bg-[#2b170e] text-[#8a6216] dark:text-[#e5c158] border border-[#d4af37]/30 text-xs font-bold cursor-pointer">
         <ShieldCheck className="w-4 h-4" /><span>Administrar</span>
       </button>
     );
