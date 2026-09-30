@@ -90,7 +90,7 @@ export const PRODUCT_ASSETS: Record<string, ProductAssets> = {
     unwrappedGlb: null,
     wrappedUsdz: encodeURI('/models/taboada-caja-bombones-con.usdz'),
     unwrappedUsdz: null,
-    targetLongestCm: 16,
+    targetLongestCm: 18,
   },
   'parati-bolsa-fruta': {
     photo: encodeURI('/images/parati-bolsa-fruta.png'),
@@ -106,7 +106,7 @@ export const PRODUCT_ASSETS: Record<string, ProductAssets> = {
     unwrappedGlb: encodeURI('/models/parati-caja-bombones-sin.glb'),
     wrappedUsdz: encodeURI('/models/parati-caja-bombones-con.usdz'),
     unwrappedUsdz: encodeURI('/models/parati-caja-bombones-sin.usdz'),
-    targetLongestCm: 24,
+    targetLongestCm: 18,
   },
   'parati-tableta-coco': {
     photo: encodeURI('/images/parati-tableta-coco.png'),
@@ -114,7 +114,7 @@ export const PRODUCT_ASSETS: Record<string, ProductAssets> = {
     unwrappedGlb: encodeURI('/models/parati-tableta-coco-sin.glb'),
     wrappedUsdz: encodeURI('/models/parati-tableta-coco-con.usdz'),
     unwrappedUsdz: encodeURI('/models/parati-tableta-coco-sin.usdz'),
-    targetLongestCm: 16,
+    targetLongestCm: 13,
   },
 };
 
