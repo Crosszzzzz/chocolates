@@ -2,6 +2,14 @@ import * as THREE from 'three';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
+// three.js ships its file loader cache OFF by default: every `loadAsync` on the
+// same URL re-downloads and re-parses the GLB. Re-opening a product (e.g. the
+// ~18 MB unwrapped scan) would repeat that work within one session. Enabling it
+// keeps the fetched response in memory, keyed by URL, so repeat loads are
+// instant. Session-scoped only — persistent caching is handled by the HTTP
+// `Cache-Control` headers in `vercel.json`.
+THREE.Cache.enabled = true;
+
 // --- M3 GLB loading infra ---
 //
 // Scale convention note: HeritageCorridorView declares its corridor as plain
